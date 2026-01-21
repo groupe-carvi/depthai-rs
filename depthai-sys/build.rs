@@ -62,7 +62,7 @@ static DEPTHAI_CORE_ROOT: Lazy<RwLock<PathBuf>> = Lazy::new(|| {
 const DEPTHAI_CORE_REPOSITORY: &str = "https://github.com/luxonis/depthai-core.git";
 
 // Latest DepthAI-Core version supported by this crate.
-const LATEST_SUPPORTED_DEPTHAI_CORE_TAG: DepthaiCoreVersion = DepthaiCoreVersion::V3_2_1;
+const LATEST_SUPPORTED_DEPTHAI_CORE_TAG: DepthaiCoreVersion = DepthaiCoreVersion::V3_3_0;
 
 const OPENCV_WIN_PREBUILT_URL: &str =
     "https://github.com/opencv/opencv/releases/download/4.11.0/opencv-4.11.0-windows.exe";
@@ -76,6 +76,7 @@ macro_rules! println_build {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DepthaiCoreVersion {
     Latest,
+    V3_3_0,
     V3_2_1,
     V3_2_0,
     V3_1_0,
@@ -85,6 +86,7 @@ impl DepthaiCoreVersion {
     fn tag(self) -> &'static str {
         match self {
             DepthaiCoreVersion::Latest => LATEST_SUPPORTED_DEPTHAI_CORE_TAG.tag(),
+            DepthaiCoreVersion::V3_3_0 => "v3.3.0",
             DepthaiCoreVersion::V3_2_1 => "v3.2.1",
             DepthaiCoreVersion::V3_2_0 => "v3.2.0",
             DepthaiCoreVersion::V3_1_0 => "v3.1.0",
@@ -104,6 +106,7 @@ fn selected_depthai_core_version() -> DepthaiCoreVersion {
 
     let candidates: &[(&str, DepthaiCoreVersion)] = &[
         ("CARGO_FEATURE_LATEST", DepthaiCoreVersion::Latest),
+        ("CARGO_FEATURE_V3_3_0", DepthaiCoreVersion::V3_3_0),
         ("CARGO_FEATURE_V3_2_1", DepthaiCoreVersion::V3_2_1),
         ("CARGO_FEATURE_V3_2_0", DepthaiCoreVersion::V3_2_0),
         ("CARGO_FEATURE_V3_1_0", DepthaiCoreVersion::V3_1_0),
@@ -120,7 +123,7 @@ fn selected_depthai_core_version() -> DepthaiCoreVersion {
 
     if picked.len() > 1 {
         panic!(
-            "Multiple DepthAI-Core version features are enabled ({:?}). Please enable at most one of: latest, v3-2-1, v3-2-0, v3-1-0.",
+            "Multiple DepthAI-Core version features are enabled ({:?}). Please enable at most one of: latest, v3-3-0, v3-2-1, v3-2-0, v3-1-0.",
             enabled
         );
     }
@@ -713,6 +716,175 @@ fn ensure_libclang_path_for_windows() {
     );
 }
 
+fn windows_clang_target_triple() -> String {
+    let target = env::var("TARGET").unwrap_or_default();
+    if target.contains("aarch64") {
+        "aarch64-pc-windows-msvc".to_string()
+    } else if target.contains("i686") {
+        "i686-pc-windows-msvc".to_string()
+    } else {
+        // Default for most Windows builds.
+        "x86_64-pc-windows-msvc".to_string()
+    }
+}
+
+fn windows_msvc_isystem_args() -> Vec<String> {
+    if !cfg!(target_os = "windows") {
+        return Vec::new();
+    }
+
+    let mut include_paths: Vec<PathBuf> = Vec::new();
+
+    // 1) If the user is running from a VS Developer Prompt, INCLUDE is typically populated
+    // with all required paths (MSVC STL + Windows SDK). This is the most reliable signal.
+    if let Some(raw) = env::var_os("INCLUDE") {
+        let raw = raw.to_string_lossy();
+        for part in raw.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+            include_paths.push(PathBuf::from(part));
+        }
+    }
+
+    // 2) Otherwise, attempt best-effort auto-detection.
+    if include_paths.is_empty() {
+        include_paths.extend(guess_msvc_include_paths());
+    }
+
+    // Convert to `-isystem <path>` pairs.
+    let mut args: Vec<String> = Vec::new();
+    for p in include_paths {
+        if p.exists() {
+            args.push("-isystem".to_string());
+            args.push(p.to_string_lossy().to_string());
+        }
+    }
+
+    if args.is_empty() {
+        println_build!(
+            "Warning: could not determine MSVC/Windows SDK include paths for libclang. If you see 'cstddef file not found', try building from a 'x64 Native Tools Command Prompt for VS' (vcvars) so the INCLUDE env var is set."
+        );
+    }
+
+    args
+}
+
+fn guess_msvc_include_paths() -> Vec<PathBuf> {
+    // Tries to discover a usable set of include directories for MSVC + Windows SDK.
+    // This is intentionally best-effort;
+
+    let mut out: Vec<PathBuf> = Vec::new();
+
+    if let Some(msvc_include) = find_msvc_stl_include_dir() {
+        out.push(msvc_include);
+    }
+
+    // Windows 10/11 SDK include directories (ucrt/shared/um/winrt/cppwinrt)
+    if let Some((sdk_root, ver)) = find_windows_kit_10_include_root_and_version() {
+        let base = sdk_root.join(&ver);
+        for sub in ["ucrt", "shared", "um", "winrt", "cppwinrt"] {
+            let p = base.join(sub);
+            if p.exists() {
+                out.push(p);
+            }
+        }
+    }
+
+    out
+}
+
+fn find_msvc_stl_include_dir() -> Option<PathBuf> {
+    // Prefer environment variables (when available).
+    if let Ok(vctools) = env::var("VCToolsInstallDir") {
+        let p = PathBuf::from(vctools).join("include");
+        if p.exists() {
+            return Some(p);
+        }
+    }
+
+    // Fallback: use vswhere to locate an installation path.
+    let install = vswhere_latest_installation_path()?;
+    let msvc_root = install.join("VC").join("Tools").join("MSVC");
+    let newest = newest_child_dir(&msvc_root)?;
+    let include = newest.join("include");
+    if include.exists() {
+        Some(include)
+    } else {
+        None
+    }
+}
+
+fn find_windows_kit_10_include_root_and_version() -> Option<(PathBuf, String)> {
+    // Environment vars sometimes exist.
+    if let Ok(dir) = env::var("WindowsSdkDir") {
+        let root = PathBuf::from(dir).join("Include");
+        if root.exists() {
+            if let Some(ver) = newest_child_dir_name(&root) {
+                return Some((root, ver));
+            }
+        }
+    }
+
+    // Default Windows Kits location.
+    let root = PathBuf::from(r"C:\\Program Files (x86)\\Windows Kits\\10\\Include");
+    if root.exists() {
+        if let Some(ver) = newest_child_dir_name(&root) {
+            return Some((root, ver));
+        }
+    }
+    None
+}
+
+fn vswhere_latest_installation_path() -> Option<PathBuf> {
+    // vswhere ships with Visual Studio Installer.
+    let vswhere = PathBuf::from(r"C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe");
+    if !vswhere.exists() {
+        return None;
+    }
+
+    let out = Command::new(vswhere)
+        .args([
+            "-latest",
+            "-products",
+            "*",
+            "-requires",
+            "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+            "-property",
+            "installationPath",
+        ])
+        .output()
+        .ok()?;
+
+    if !out.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let line = stdout.lines().map(str::trim).find(|l| !l.is_empty())?;
+    Some(PathBuf::from(line))
+}
+
+fn newest_child_dir(parent: &Path) -> Option<PathBuf> {
+    let mut dirs: Vec<PathBuf> = fs::read_dir(parent)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().ok().is_some_and(|t| t.is_dir()))
+        .map(|e| e.path())
+        .collect();
+    // Lexicographic sorting works for VS version folder names (e.g. 14.38.33130).
+    dirs.sort();
+    dirs.pop()
+}
+
+fn newest_child_dir_name(parent: &Path) -> Option<String> {
+    let mut names: Vec<String> = fs::read_dir(parent)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().ok().is_some_and(|t| t.is_dir()))
+        .filter_map(|e| e.file_name().to_str().map(|s| s.to_string()))
+        .collect();
+    names.sort();
+    names.pop()
+}
+
 fn build_with_autocxx(no_native: bool) -> Vec<PathBuf> {
     println_build!("Building with autocxx...");
 
@@ -758,29 +930,35 @@ fn build_with_autocxx(no_native: bool) -> Vec<PathBuf> {
     // Convert to references
     let include_refs: Vec<&Path> = include_paths.iter().map(|p| p.as_path()).collect();
 
-    // Create builder
-    // NOTE: `extra_clang_args` are used both for parsing (bindgen) and compiling the generated C++.
+    // Create builder.
+    // NOTE: `extra_clang_args` are used for the bindgen/libclang parsing step.
     // In `no-native` mode we define a macro that prevents pulling in DepthAI headers.
-    let builder = if cfg!(target_arch = "aarch64") {
-        if no_native {
-            autocxx_build::Builder::new("src/lib.rs", &include_refs)
-                .extra_clang_args(&[
-                    "-std=c++17",
-                    "-I/usr/lib/gcc/aarch64-linux-gnu/13/include",
-                    "-DDEPTHAI_SYS_NO_NATIVE",
-                ])
-        } else {
-            autocxx_build::Builder::new("src/lib.rs", &include_refs)
-                .extra_clang_args(&["-std=c++17", "-I/usr/lib/gcc/aarch64-linux-gnu/13/include"])
-        }
-    } else {
-        if no_native {
-            autocxx_build::Builder::new("src/lib.rs", &include_refs)
-                .extra_clang_args(&["-std=c++17", "-DDEPTHAI_SYS_NO_NATIVE"])
-        } else {
-            autocxx_build::Builder::new("src/lib.rs", &include_refs).extra_clang_args(&["-std=c++17"])
-        }
-    };
+    //
+    // Windows note:
+    // libclang is not `cl.exe` and does not automatically inherit MSVC/Windows SDK include
+    // discovery. If the standard library headers (e.g. <cstddef>) are not found, we add
+    // include paths from the environment (INCLUDE) or attempt to auto-detect a suitable
+    // VS/Windows SDK installation.
+    let mut extra_clang_args: Vec<String> = vec!["-std=c++17".to_string()];
+
+    if cfg!(target_os = "windows") {
+        extra_clang_args.push(format!("--target={}", windows_clang_target_triple()));
+        extra_clang_args.push("-fms-compatibility".to_string());
+        extra_clang_args.push("-fms-extensions".to_string());
+        extra_clang_args.extend(windows_msvc_isystem_args());
+    }
+
+    if cfg!(target_arch = "aarch64") {
+        extra_clang_args.push("-I/usr/lib/gcc/aarch64-linux-gnu/13/include".to_string());
+    }
+
+    if no_native {
+        extra_clang_args.push("-DDEPTHAI_SYS_NO_NATIVE".to_string());
+    }
+
+    let extra_clang_arg_refs: Vec<&str> = extra_clang_args.iter().map(|s| s.as_str()).collect();
+    let builder = autocxx_build::Builder::new("src/lib.rs", &include_refs)
+        .extra_clang_args(&extra_clang_arg_refs);
 
     // Build with extra C++ flags
     let mut build = builder.build().expect("Failed to build autocxx");

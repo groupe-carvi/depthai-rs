@@ -58,6 +58,7 @@ rerun = ["dep:rerun", "dep:tokio", "dep:re_web_viewer_server"]
 # Cargo feature names can't contain dots, so version selectors use `v3-2-1` to mean tag `v3.2.1`.
 # If none are selected, `depthai-sys` uses `latest` (the default).
 latest = ["depthai-sys/latest"]
+v3-3-0 = ["depthai-sys/v3-3-0"]
 v3-2-1 = ["depthai-sys/v3-2-1"]
 v3-2-0 = ["depthai-sys/v3-2-0"]
 v3-1-0 = ["depthai-sys/v3-1-0"]

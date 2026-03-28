@@ -4,7 +4,7 @@ use std::time::Duration;
 use autocxx::c_int;
 use depthai_sys::{depthai, DaiCameraNode, DaiDataQueue, DaiImgFrame, DaiNode};
 
-pub use crate::common::{CameraBoardSocket, CameraSensorType, ImageFrameType, ResizeMode};
+pub use crate::common::{CameraBoardSocket, CameraImageOrientation, CameraSensorType, ImageFrameType, ResizeMode};
 use crate::error::{Result, clear_error_flag, last_error, take_error_if_any};
 use crate::pipeline::device_node::CreateInPipelineWith;
 use crate::pipeline::{Pipeline, PipelineInner};
@@ -304,6 +304,63 @@ impl CameraNode {
             return Err(err);
         }
         Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // v3.4.0+ additions
+    // -----------------------------------------------------------------------
+
+    /// Request an output at the ISP (Image Signal Processor) resolution.
+    ///
+    /// Unlike `request_output`, the fps does not participate in sensor-fps voting.
+    /// Pass `fps = None` to let the pipeline select the rate automatically.
+    ///
+    /// Requires depthai-core **v3.4.0+**.
+    pub fn request_isp_output(&self, fps: Option<f32>) -> Result<CameraOutput> {
+        clear_error_flag();
+        let fps_val = fps.unwrap_or(-1.0);
+        let handle = unsafe {
+            depthai::dai_camera_request_isp_output(
+                self.node.handle() as DaiCameraNode,
+                fps_val,
+            )
+        };
+        if handle.is_null() {
+            Err(last_error("failed to request ISP output"))
+        } else {
+            Ok(NodeOutput::from_handle(std::sync::Arc::clone(&self.node.pipeline), handle))
+        }
+    }
+
+    /// Set the camera sensor image orientation (pixel readout direction).
+    ///
+    /// Requires depthai-core **v3.4.0+** (RVC2 devices).
+    pub fn set_image_orientation(&self, orientation: CameraImageOrientation) -> Result<()> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_camera_set_image_orientation(
+                self.node.handle() as DaiCameraNode,
+                c_int(orientation.as_raw()),
+            )
+        };
+        if let Some(err) = take_error_if_any("failed to set camera image orientation") {
+            return Err(err);
+        }
+        Ok(())
+    }
+
+    /// Get the camera sensor image orientation currently configured.
+    ///
+    /// Requires depthai-core **v3.4.0+** (RVC2 devices).
+    pub fn image_orientation(&self) -> Result<CameraImageOrientation> {
+        clear_error_flag();
+        let raw: i32 = unsafe {
+            depthai::dai_camera_get_image_orientation(self.node.handle() as DaiCameraNode)
+        }.into();
+        if let Some(err) = take_error_if_any("failed to get camera image orientation") {
+            return Err(err);
+        }
+        Ok(CameraImageOrientation::from_raw(raw))
     }
 
     pub fn raw_num_frames_pool(&self) -> Result<i32> {

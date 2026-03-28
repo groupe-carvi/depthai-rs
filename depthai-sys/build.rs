@@ -62,7 +62,7 @@ static DEPTHAI_CORE_ROOT: Lazy<RwLock<PathBuf>> = Lazy::new(|| {
 const DEPTHAI_CORE_REPOSITORY: &str = "https://github.com/luxonis/depthai-core.git";
 
 // Latest DepthAI-Core version supported by this crate.
-const LATEST_SUPPORTED_DEPTHAI_CORE_TAG: DepthaiCoreVersion = DepthaiCoreVersion::V3_3_0;
+const LATEST_SUPPORTED_DEPTHAI_CORE_TAG: DepthaiCoreVersion = DepthaiCoreVersion::V3_5_0;
 
 const OPENCV_WIN_PREBUILT_URL: &str =
     "https://github.com/opencv/opencv/releases/download/4.11.0/opencv-4.11.0-windows.exe";

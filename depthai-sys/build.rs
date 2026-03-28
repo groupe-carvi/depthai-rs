@@ -76,6 +76,8 @@ macro_rules! println_build {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DepthaiCoreVersion {
     Latest,
+    V3_5_0,
+    V3_4_0,
     V3_3_0,
     V3_2_1,
     V3_2_0,
@@ -86,6 +88,8 @@ impl DepthaiCoreVersion {
     fn tag(self) -> &'static str {
         match self {
             DepthaiCoreVersion::Latest => LATEST_SUPPORTED_DEPTHAI_CORE_TAG.tag(),
+            DepthaiCoreVersion::V3_5_0 => "v3.5.0",
+            DepthaiCoreVersion::V3_4_0 => "v3.4.0",
             DepthaiCoreVersion::V3_3_0 => "v3.3.0",
             DepthaiCoreVersion::V3_2_1 => "v3.2.1",
             DepthaiCoreVersion::V3_2_0 => "v3.2.0",
@@ -106,6 +110,8 @@ fn selected_depthai_core_version() -> DepthaiCoreVersion {
 
     let candidates: &[(&str, DepthaiCoreVersion)] = &[
         ("CARGO_FEATURE_LATEST", DepthaiCoreVersion::Latest),
+        ("CARGO_FEATURE_V3_5_0", DepthaiCoreVersion::V3_5_0),
+        ("CARGO_FEATURE_V3_4_0", DepthaiCoreVersion::V3_4_0),
         ("CARGO_FEATURE_V3_3_0", DepthaiCoreVersion::V3_3_0),
         ("CARGO_FEATURE_V3_2_1", DepthaiCoreVersion::V3_2_1),
         ("CARGO_FEATURE_V3_2_0", DepthaiCoreVersion::V3_2_0),

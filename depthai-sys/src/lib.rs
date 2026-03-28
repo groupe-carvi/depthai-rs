@@ -304,6 +304,7 @@ include_cpp! {
     generate!("dai::dai_input_create_input_queue")
     generate!("dai::dai_input_queue_delete")
     generate!("dai::dai_input_queue_send")
+    generate!("dai::dai_input_queue_send_buffer")
 
     // Output send helpers
     generate!("dai::dai_output_send_buffer")
@@ -326,6 +327,19 @@ include_cpp! {
     generate!("dai::dai_free_cstring")
     generate!("dai::dai_get_last_error")
     generate!("dai::dai_clear_last_error")
+
+    // v3.4.0+ Gate node API
+    generate!("dai::dai_pipeline_create_gate")
+    generate!("dai::dai_gate_set_run_on_host")
+    generate!("dai::dai_gate_run_on_host")
+    generate!("dai::dai_gate_control_open_all")
+    generate!("dai::dai_gate_control_close")
+    generate!("dai::dai_gate_control_open_n")
+
+    // v3.4.0+ Camera additions
+    generate!("dai::dai_camera_request_isp_output")
+    generate!("dai::dai_camera_set_image_orientation")
+    generate!("dai::dai_camera_get_image_orientation")
 
     safety!(unsafe_ffi)
 }

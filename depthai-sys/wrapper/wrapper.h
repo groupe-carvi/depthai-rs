@@ -454,6 +454,34 @@ API void dai_encoded_frame_release(DaiEncodedFrame frame);
 API int dai_device_get_connected_camera_sockets(DaiDevice device, int* sockets, int max_count);
 API const char* dai_camera_socket_name(int socket);
 
+// ---------------------------------------------------------------------------
+// v3.4.0+ API additions
+// Gate node helpers (available when depthai-core >= v3.4.0 / Gate.hpp present)
+// ---------------------------------------------------------------------------
+API DaiNode dai_pipeline_create_gate(DaiPipeline pipeline);
+
+// Send a Buffer (or Buffer subtype such as GateControl) through an InputQueue.
+API void dai_input_queue_send_buffer(DaiInputQueue queue, DaiBuffer buffer);
+API void dai_gate_set_run_on_host(DaiNode gate, bool run_on_host);
+API bool dai_gate_run_on_host(DaiNode gate);
+
+// GateControl factory helpers.
+// All returned handles are `std::shared_ptr<dai::GateControl>*` (a `DaiBuffer` subtype).
+// Caller must release via `dai_buffer_release`.
+API DaiBuffer dai_gate_control_open_all();
+API DaiBuffer dai_gate_control_close();
+API DaiBuffer dai_gate_control_open_n(int num_messages, int fps);
+
+// Camera ISP output (available when depthai-core >= v3.4.0).
+// Pass fps <= 0 to leave it unspecified.
+API DaiOutput dai_camera_request_isp_output(DaiCameraNode camera, float fps);
+
+// Camera image orientation (available when depthai-core >= v3.4.0).
+// orientation values mirror dai::CameraImageOrientation: AUTO=-1, NORMAL=0,
+// HORIZONTAL_MIRROR=1, VERTICAL_FLIP=2, ROTATE_180_DEG=3.
+API void dai_camera_set_image_orientation(DaiCameraNode camera, int orientation);
+API int dai_camera_get_image_orientation(DaiCameraNode camera);
+
 // Error handling
 API const char* dai_get_last_error();
 API void dai_clear_last_error();

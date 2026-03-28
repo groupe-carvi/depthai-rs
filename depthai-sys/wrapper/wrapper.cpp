@@ -26,9 +26,19 @@
     #else
         #define DAI_HAS_NODE_NEURAL_DEPTH 0
     #endif
+
+    // Gate node and GateControl were introduced in depthai-core v3.4.0.
+    #if __has_include(<depthai/pipeline/node/Gate.hpp>)
+        #include <depthai/pipeline/node/Gate.hpp>
+        #include <depthai/pipeline/datatype/GateControl.hpp>
+        #define DAI_HAS_NODE_GATE 1
+    #else
+        #define DAI_HAS_NODE_GATE 0
+    #endif
 #else
     #define DAI_HAS_NODE_RECTIFICATION 0
     #define DAI_HAS_NODE_NEURAL_DEPTH 0
+    #define DAI_HAS_NODE_GATE 0
 #endif
 #include <chrono>
 #include <cstring>
@@ -2583,9 +2593,17 @@ DaiImgFrame dai_rgbd_get_rgb_frame(DaiRGBDData rgbd) {
     }
     try {
         auto ptr = static_cast<std::shared_ptr<dai::RGBDData>*>(rgbd);
+#if DAI_HAS_NODE_GATE  // v3.4.0+: getRGBFrame() returns optional<FrameVariant>
+        auto opt = (*ptr)->getRGBFrame();
+        if(!opt) return nullptr;
+        auto* img = std::get_if<std::shared_ptr<dai::ImgFrame>>(&opt.value());
+        if(!img || !*img) return nullptr;
+        return new std::shared_ptr<dai::ImgFrame>(*img);
+#else
         auto frame = (*ptr)->getRGBFrame();
         if(!frame) return nullptr;
         return new std::shared_ptr<dai::ImgFrame>(frame);
+#endif
     } catch(const std::exception& e) {
         last_error = std::string("dai_rgbd_get_rgb_frame failed: ") + e.what();
         return nullptr;
@@ -2599,9 +2617,17 @@ DaiImgFrame dai_rgbd_get_depth_frame(DaiRGBDData rgbd) {
     }
     try {
         auto ptr = static_cast<std::shared_ptr<dai::RGBDData>*>(rgbd);
+#if DAI_HAS_NODE_GATE  // v3.4.0+: getDepthFrame() returns optional<FrameVariant>
+        auto opt = (*ptr)->getDepthFrame();
+        if(!opt) return nullptr;
+        auto* img = std::get_if<std::shared_ptr<dai::ImgFrame>>(&opt.value());
+        if(!img || !*img) return nullptr;
+        return new std::shared_ptr<dai::ImgFrame>(*img);
+#else
         auto frame = (*ptr)->getDepthFrame();
         if(!frame) return nullptr;
         return new std::shared_ptr<dai::ImgFrame>(frame);
+#endif
     } catch(const std::exception& e) {
         last_error = std::string("dai_rgbd_get_depth_frame failed: ") + e.what();
         return nullptr;
@@ -4674,6 +4700,199 @@ const char* dai_get_last_error() {
 
 void dai_clear_last_error() {
     last_error.clear();
+}
+
+// ---------------------------------------------------------------------------
+// v3.4.0+ Gate node API
+// ---------------------------------------------------------------------------
+
+// Send a Buffer (or Buffer subtype, e.g. GateControl) through an InputQueue.
+// This performs the necessary Buffer -> ADatatype upcast internally so callers
+// don't need to create an intermediate DaiDatatype handle.
+void dai_input_queue_send_buffer(DaiInputQueue queue, DaiBuffer buffer) {
+    if (!queue || !buffer) {
+        last_error = "dai_input_queue_send_buffer: null queue/buffer";
+        return;
+    }
+    try {
+        auto q = static_cast<std::shared_ptr<dai::InputQueue>*>(queue);
+        auto buf = static_cast<std::shared_ptr<dai::Buffer>*>(buffer);
+        if (!q->get() || !(*q)) {
+            last_error = "dai_input_queue_send_buffer: invalid queue";
+            return;
+        }
+        if (!buf->get() || !(*buf)) {
+            last_error = "dai_input_queue_send_buffer: invalid buffer";
+            return;
+        }
+        // Upcast Buffer → ADatatype so InputQueue::send accepts the message.
+        std::shared_ptr<dai::ADatatype> msg = std::static_pointer_cast<dai::ADatatype>(*buf);
+        (*q)->send(msg);
+    } catch (const std::exception& e) {
+        last_error = std::string("dai_input_queue_send_buffer failed: ") + e.what();
+    }
+}
+
+DaiNode dai_pipeline_create_gate(DaiPipeline pipeline) {
+#if DAI_HAS_NODE_GATE
+    if (!pipeline) {
+        last_error = "dai_pipeline_create_gate: null pipeline";
+        return nullptr;
+    }
+    try {
+        auto* pip = static_cast<dai::Pipeline*>(pipeline);
+        auto gate = pip->create<dai::node::Gate>();
+        return static_cast<DaiNode>(gate.get());
+    } catch (const std::exception& e) {
+        last_error = std::string("dai_pipeline_create_gate failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    last_error = "dai_pipeline_create_gate: Gate node is not available in this version of depthai-core (requires v3.4.0+)";
+    return nullptr;
+#endif
+}
+
+void dai_gate_set_run_on_host(DaiNode gate, bool run_on_host) {
+#if DAI_HAS_NODE_GATE
+    if (!gate) {
+        last_error = "dai_gate_set_run_on_host: null gate";
+        return;
+    }
+    try {
+        auto* g = static_cast<dai::node::Gate*>(gate);
+        g->setRunOnHost(run_on_host);
+    } catch (const std::exception& e) {
+        last_error = std::string("dai_gate_set_run_on_host failed: ") + e.what();
+    }
+#else
+    last_error = "dai_gate_set_run_on_host: Gate node is not available in this version of depthai-core (requires v3.4.0+)";
+#endif
+}
+
+bool dai_gate_run_on_host(DaiNode gate) {
+#if DAI_HAS_NODE_GATE
+    if (!gate) {
+        last_error = "dai_gate_run_on_host: null gate";
+        return false;
+    }
+    try {
+        auto* g = static_cast<dai::node::Gate*>(gate);
+        return g->runOnHost();
+    } catch (const std::exception& e) {
+        last_error = std::string("dai_gate_run_on_host failed: ") + e.what();
+        return false;
+    }
+#else
+    last_error = "dai_gate_run_on_host: Gate node is not available in this version of depthai-core (requires v3.4.0+)";
+    return false;
+#endif
+}
+
+DaiBuffer dai_gate_control_open_all() {
+#if DAI_HAS_NODE_GATE
+    try {
+        auto ctrl = dai::GateControl::openGate();
+        return new std::shared_ptr<dai::Buffer>(std::static_pointer_cast<dai::Buffer>(ctrl));
+    } catch (const std::exception& e) {
+        last_error = std::string("dai_gate_control_open_all failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    last_error = "dai_gate_control_open_all: GateControl is not available in this version of depthai-core (requires v3.4.0+)";
+    return nullptr;
+#endif
+}
+
+DaiBuffer dai_gate_control_close() {
+#if DAI_HAS_NODE_GATE
+    try {
+        auto ctrl = dai::GateControl::closeGate();
+        return new std::shared_ptr<dai::Buffer>(std::static_pointer_cast<dai::Buffer>(ctrl));
+    } catch (const std::exception& e) {
+        last_error = std::string("dai_gate_control_close failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    last_error = "dai_gate_control_close: GateControl is not available in this version of depthai-core (requires v3.4.0+)";
+    return nullptr;
+#endif
+}
+
+DaiBuffer dai_gate_control_open_n(int num_messages, int fps) {
+#if DAI_HAS_NODE_GATE
+    try {
+        auto ctrl = dai::GateControl::openGate(num_messages, fps);
+        return new std::shared_ptr<dai::Buffer>(std::static_pointer_cast<dai::Buffer>(ctrl));
+    } catch (const std::exception& e) {
+        last_error = std::string("dai_gate_control_open_n failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    last_error = "dai_gate_control_open_n: GateControl is not available in this version of depthai-core (requires v3.4.0+)";
+    return nullptr;
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// v3.4.0+ Camera additions
+// ---------------------------------------------------------------------------
+
+DaiOutput dai_camera_request_isp_output(DaiCameraNode camera, float fps) {
+#if DAI_HAS_NODE_GATE
+    if (!camera) {
+        last_error = "dai_camera_request_isp_output: null camera";
+        return nullptr;
+    }
+    try {
+        auto cam = static_cast<dai::node::Camera*>(camera);
+        std::optional<float> opt_fps = (fps > 0.0f) ? std::optional<float>(fps) : std::nullopt;
+        dai::Node::Output* output = cam->requestIspOutput(opt_fps);
+        return static_cast<DaiOutput>(output);
+    } catch (const std::exception& e) {
+        last_error = std::string("dai_camera_request_isp_output failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    last_error = "dai_camera_request_isp_output: requestIspOutput is not available in this version of depthai-core (requires v3.4.0+)";
+    return nullptr;
+#endif
+}
+
+void dai_camera_set_image_orientation(DaiCameraNode camera, int orientation) {
+#if DAI_HAS_NODE_GATE
+    if (!camera) {
+        last_error = "dai_camera_set_image_orientation: null camera";
+        return;
+    }
+    try {
+        auto cam = static_cast<dai::node::Camera*>(camera);
+        cam->setImageOrientation(static_cast<dai::CameraImageOrientation>(orientation));
+    } catch (const std::exception& e) {
+        last_error = std::string("dai_camera_set_image_orientation failed: ") + e.what();
+    }
+#else
+    last_error = "dai_camera_set_image_orientation: setImageOrientation is not available in this version of depthai-core (requires v3.4.0+)";
+#endif
+}
+
+int dai_camera_get_image_orientation(DaiCameraNode camera) {
+#if DAI_HAS_NODE_GATE
+    if (!camera) {
+        last_error = "dai_camera_get_image_orientation: null camera";
+        return -1;
+    }
+    try {
+        auto cam = static_cast<dai::node::Camera*>(camera);
+        return static_cast<int>(cam->getImageOrientation());
+    } catch (const std::exception& e) {
+        last_error = std::string("dai_camera_get_image_orientation failed: ") + e.what();
+        return -1;
+    }
+#else
+    last_error = "dai_camera_get_image_orientation: getImageOrientation is not available in this version of depthai-core (requires v3.4.0+)";
+    return -1;
+#endif
 }
 
 } // namespace dai

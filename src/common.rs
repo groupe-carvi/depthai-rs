@@ -179,3 +179,37 @@ impl fmt::Display for CameraBoardSocket {
         write!(f, "{:?}", self)
     }
 }
+
+/// Camera sensor image orientation / pixel readout.
+///
+/// Mirrors `dai::CameraImageOrientation`. Note: 90° and 270° rotations are not available.
+/// `Auto` lets the device choose a sensible default (e.g. `Rotate180Deg` on OAK-1/megaAI).
+///
+/// Added to the Camera node in depthai-core **v3.4.0** for RVC2 devices.
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CameraImageOrientation {
+    /// Device-selected default.
+    #[default]
+    Auto = -1,
+    Normal = 0,
+    HorizontalMirror = 1,
+    VerticalFlip = 2,
+    Rotate180Deg = 3,
+}
+
+impl CameraImageOrientation {
+    pub fn as_raw(self) -> i32 {
+        self as i32
+    }
+
+    pub fn from_raw(value: i32) -> Self {
+        match value {
+            0 => Self::Normal,
+            1 => Self::HorizontalMirror,
+            2 => Self::VerticalFlip,
+            3 => Self::Rotate180Deg,
+            _ => Self::Auto,
+        }
+    }
+}

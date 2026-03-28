@@ -13,6 +13,14 @@ use crate::host_node::{Buffer, MessageGroup};
 use crate::pointcloud::PointCloudData;
 use crate::rgbd::RgbdData;
 
+/// Integer discriminants for DepthAI message types returned by `ADatatype::getDatatype()`.
+///
+/// **Version note**: these values reflect the depthai-core **v3.4.0** enum layout.
+/// Earlier versions (v3.3.0 and below) have different numeric values because
+/// `SegmentationMask` and `GateControl` were inserted before `NNData` and `MapData` was
+/// inserted before `TransformData` in v3.4.0.  The cast/accessor methods
+/// (`as_frame`, `as_encoded_frame`, etc.) use C++ `dynamic_cast` and are unaffected;
+/// only the informational `datatype()` helper returns unexpected variants on older builds.
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
@@ -21,41 +29,62 @@ pub enum DatatypeEnum {
     Buffer = 1,
     ImgFrame = 2,
     EncodedFrame = 3,
-    NNData = 4,
-    ImageManipConfig = 5,
-    CameraControl = 6,
-    ImgDetections = 7,
-    SpatialImgDetections = 8,
-    SystemInformation = 9,
-    SystemInformationS3 = 10,
-    SpatialLocationCalculatorConfig = 11,
-    SpatialLocationCalculatorData = 12,
-    EdgeDetectorConfig = 13,
-    AprilTagConfig = 14,
-    AprilTags = 15,
-    Tracklets = 16,
-    IMUData = 17,
-    StereoDepthConfig = 18,
-    NeuralDepthConfig = 19,
-    FeatureTrackerConfig = 20,
-    ThermalConfig = 21,
-    ToFConfig = 22,
-    TrackedFeatures = 23,
-    BenchmarkReport = 24,
-    MessageGroup = 25,
-    TransformData = 26,
-    PointCloudConfig = 27,
-    PointCloudData = 28,
-    RGBDData = 29,
-    ImageAlignConfig = 30,
-    ImgAnnotations = 31,
-    ImageFiltersConfig = 32,
-    ToFDepthConfidenceFilterConfig = 33,
-    ObjectTrackerConfig = 34,
-    DynamicCalibrationControl = 35,
-    DynamicCalibrationResult = 36,
-    CalibrationQuality = 37,
-    CoverageData = 38,
+    /// v3.4.0+
+    SegmentationMask = 4,
+    /// v3.4.0+ — used by the Gate node's control input.
+    GateControl = 5,
+    NNData = 6,
+    ImageManipConfig = 7,
+    CameraControl = 8,
+    ImgDetections = 9,
+    SpatialImgDetections = 10,
+    SystemInformation = 11,
+    /// Renamed from `SystemInformationS3` in v3.4.0.
+    SystemInformationRVC4 = 12,
+    SpatialLocationCalculatorConfig = 13,
+    SpatialLocationCalculatorData = 14,
+    EdgeDetectorConfig = 15,
+    AprilTagConfig = 16,
+    AprilTags = 17,
+    Tracklets = 18,
+    IMUData = 19,
+    StereoDepthConfig = 20,
+    NeuralDepthConfig = 21,
+    FeatureTrackerConfig = 22,
+    ThermalConfig = 23,
+    ToFConfig = 24,
+    TrackedFeatures = 25,
+    BenchmarkReport = 26,
+    MessageGroup = 27,
+    /// v3.4.0+
+    MapData = 28,
+    TransformData = 29,
+    PointCloudConfig = 30,
+    PointCloudData = 31,
+    RGBDData = 32,
+    ImageAlignConfig = 33,
+    ImgAnnotations = 34,
+    ImageFiltersConfig = 35,
+    ToFDepthConfidenceFilterConfig = 36,
+    ObjectTrackerConfig = 37,
+    DynamicCalibrationControl = 38,
+    DynamicCalibrationResult = 39,
+    CalibrationQuality = 40,
+    /// v3.4.0+
+    CalibrationMetrics = 41,
+    CoverageData = 42,
+    /// v3.4.0+
+    SegmentationParserConfig = 43,
+    /// v3.4.0+
+    PipelineEvent = 44,
+    /// v3.4.0+
+    PipelineState = 45,
+    /// v3.4.0+
+    PipelineEventAggregationConfig = 46,
+    /// v3.4.0+
+    VppConfig = 47,
+    /// v3.4.0+
+    PacketizedData = 48,
 }
 
 impl DatatypeEnum {
@@ -66,41 +95,51 @@ impl DatatypeEnum {
             1 => Some(Self::Buffer),
             2 => Some(Self::ImgFrame),
             3 => Some(Self::EncodedFrame),
-            4 => Some(Self::NNData),
-            5 => Some(Self::ImageManipConfig),
-            6 => Some(Self::CameraControl),
-            7 => Some(Self::ImgDetections),
-            8 => Some(Self::SpatialImgDetections),
-            9 => Some(Self::SystemInformation),
-            10 => Some(Self::SystemInformationS3),
-            11 => Some(Self::SpatialLocationCalculatorConfig),
-            12 => Some(Self::SpatialLocationCalculatorData),
-            13 => Some(Self::EdgeDetectorConfig),
-            14 => Some(Self::AprilTagConfig),
-            15 => Some(Self::AprilTags),
-            16 => Some(Self::Tracklets),
-            17 => Some(Self::IMUData),
-            18 => Some(Self::StereoDepthConfig),
-            19 => Some(Self::NeuralDepthConfig),
-            20 => Some(Self::FeatureTrackerConfig),
-            21 => Some(Self::ThermalConfig),
-            22 => Some(Self::ToFConfig),
-            23 => Some(Self::TrackedFeatures),
-            24 => Some(Self::BenchmarkReport),
-            25 => Some(Self::MessageGroup),
-            26 => Some(Self::TransformData),
-            27 => Some(Self::PointCloudConfig),
-            28 => Some(Self::PointCloudData),
-            29 => Some(Self::RGBDData),
-            30 => Some(Self::ImageAlignConfig),
-            31 => Some(Self::ImgAnnotations),
-            32 => Some(Self::ImageFiltersConfig),
-            33 => Some(Self::ToFDepthConfidenceFilterConfig),
-            34 => Some(Self::ObjectTrackerConfig),
-            35 => Some(Self::DynamicCalibrationControl),
-            36 => Some(Self::DynamicCalibrationResult),
-            37 => Some(Self::CalibrationQuality),
-            38 => Some(Self::CoverageData),
+            4 => Some(Self::SegmentationMask),
+            5 => Some(Self::GateControl),
+            6 => Some(Self::NNData),
+            7 => Some(Self::ImageManipConfig),
+            8 => Some(Self::CameraControl),
+            9 => Some(Self::ImgDetections),
+            10 => Some(Self::SpatialImgDetections),
+            11 => Some(Self::SystemInformation),
+            12 => Some(Self::SystemInformationRVC4),
+            13 => Some(Self::SpatialLocationCalculatorConfig),
+            14 => Some(Self::SpatialLocationCalculatorData),
+            15 => Some(Self::EdgeDetectorConfig),
+            16 => Some(Self::AprilTagConfig),
+            17 => Some(Self::AprilTags),
+            18 => Some(Self::Tracklets),
+            19 => Some(Self::IMUData),
+            20 => Some(Self::StereoDepthConfig),
+            21 => Some(Self::NeuralDepthConfig),
+            22 => Some(Self::FeatureTrackerConfig),
+            23 => Some(Self::ThermalConfig),
+            24 => Some(Self::ToFConfig),
+            25 => Some(Self::TrackedFeatures),
+            26 => Some(Self::BenchmarkReport),
+            27 => Some(Self::MessageGroup),
+            28 => Some(Self::MapData),
+            29 => Some(Self::TransformData),
+            30 => Some(Self::PointCloudConfig),
+            31 => Some(Self::PointCloudData),
+            32 => Some(Self::RGBDData),
+            33 => Some(Self::ImageAlignConfig),
+            34 => Some(Self::ImgAnnotations),
+            35 => Some(Self::ImageFiltersConfig),
+            36 => Some(Self::ToFDepthConfidenceFilterConfig),
+            37 => Some(Self::ObjectTrackerConfig),
+            38 => Some(Self::DynamicCalibrationControl),
+            39 => Some(Self::DynamicCalibrationResult),
+            40 => Some(Self::CalibrationQuality),
+            41 => Some(Self::CalibrationMetrics),
+            42 => Some(Self::CoverageData),
+            43 => Some(Self::SegmentationParserConfig),
+            44 => Some(Self::PipelineEvent),
+            45 => Some(Self::PipelineState),
+            46 => Some(Self::PipelineEventAggregationConfig),
+            47 => Some(Self::VppConfig),
+            48 => Some(Self::PacketizedData),
             _ => None,
         }
     }
@@ -616,6 +655,19 @@ impl InputQueue {
         clear_error_flag();
         unsafe { depthai::dai_input_queue_send(self.handle, msg.handle()) };
         if let Some(err) = take_error_if_any("failed to send input queue message") {
+            Err(err)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Send a `Buffer` (or any `Buffer` subtype, such as `GateControl`) through this queue.
+    ///
+    /// This is the canonical way to send control messages like `GateControl` to nodes.
+    pub fn send_buffer(&self, buffer: &crate::host_node::Buffer) -> Result<()> {
+        clear_error_flag();
+        unsafe { depthai::dai_input_queue_send_buffer(self.handle, buffer.handle()) };
+        if let Some(err) = take_error_if_any("failed to send buffer to input queue") {
             Err(err)
         } else {
             Ok(())

@@ -132,7 +132,7 @@ impl GateControl {
         }
     }
 
-    /// Borrow the underlying `Buffer` handle so it can be sent via [`InputQueue::send_buffer`].
+    /// Borrow the underlying `Buffer` handle so it can be sent via ```rust,ignore [`InputQueue::send_buffer`]```.
     pub fn as_buffer(&self) -> &Buffer {
         &self.buffer
     }

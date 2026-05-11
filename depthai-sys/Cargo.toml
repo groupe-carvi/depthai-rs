@@ -45,6 +45,7 @@ default = ["native"]
 # These are read by `build.rs` via `CARGO_FEATURE_*` environment variables.
 # Only one of these should be enabled at a time.
 latest = []
+v3-6-1 = []
 v3-5-0 = []
 v3-4-0 = []
 v3-3-0 = []

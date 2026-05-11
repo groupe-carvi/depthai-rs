@@ -62,7 +62,7 @@ static DEPTHAI_CORE_ROOT: Lazy<RwLock<PathBuf>> = Lazy::new(|| {
 const DEPTHAI_CORE_REPOSITORY: &str = "https://github.com/luxonis/depthai-core.git";
 
 // Latest DepthAI-Core version supported by this crate.
-const LATEST_SUPPORTED_DEPTHAI_CORE_TAG: DepthaiCoreVersion = DepthaiCoreVersion::V3_5_0;
+const LATEST_SUPPORTED_DEPTHAI_CORE_TAG: DepthaiCoreVersion = DepthaiCoreVersion::V3_6_1;
 
 const OPENCV_WIN_PREBUILT_URL: &str =
     "https://github.com/opencv/opencv/releases/download/4.11.0/opencv-4.11.0-windows.exe";
@@ -76,6 +76,7 @@ macro_rules! println_build {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DepthaiCoreVersion {
     Latest,
+    V3_6_1,
     V3_5_0,
     V3_4_0,
     V3_3_0,
@@ -88,6 +89,7 @@ impl DepthaiCoreVersion {
     fn tag(self) -> &'static str {
         match self {
             DepthaiCoreVersion::Latest => LATEST_SUPPORTED_DEPTHAI_CORE_TAG.tag(),
+            DepthaiCoreVersion::V3_6_1 => "v3.6.1",
             DepthaiCoreVersion::V3_5_0 => "v3.5.0",
             DepthaiCoreVersion::V3_4_0 => "v3.4.0",
             DepthaiCoreVersion::V3_3_0 => "v3.3.0",
@@ -110,6 +112,7 @@ fn selected_depthai_core_version() -> DepthaiCoreVersion {
 
     let candidates: &[(&str, DepthaiCoreVersion)] = &[
         ("CARGO_FEATURE_LATEST", DepthaiCoreVersion::Latest),
+        ("CARGO_FEATURE_V3_6_1", DepthaiCoreVersion::V3_6_1),
         ("CARGO_FEATURE_V3_5_0", DepthaiCoreVersion::V3_5_0),
         ("CARGO_FEATURE_V3_4_0", DepthaiCoreVersion::V3_4_0),
         ("CARGO_FEATURE_V3_3_0", DepthaiCoreVersion::V3_3_0),
@@ -129,7 +132,7 @@ fn selected_depthai_core_version() -> DepthaiCoreVersion {
 
     if picked.len() > 1 {
         panic!(
-            "Multiple DepthAI-Core version features are enabled ({:?}). Please enable at most one of: latest, v3-3-0, v3-2-1, v3-2-0, v3-1-0.",
+            "Multiple DepthAI-Core version features are enabled ({:?}). Please enable at most one of: latest, v3-6-1, v3-5-0, v3-4-0, v3-3-0, v3-2-1, v3-2-0, v3-1-0.",
             enabled
         );
     }
@@ -1820,6 +1823,27 @@ fn cmake_build_depthai_core(path: PathBuf) -> Option<PathBuf> {
         bool_to_cmake(events_manager_support)
     );
 
+    // Build an augmented PATH that includes common user-local bin directories so
+    // that tools like `nasm` (required by vcpkg's openh264 port) are discoverable
+    // even when they are installed without root privileges (e.g. via dpkg -x).
+    let augmented_path = {
+        let current = env::var("PATH").unwrap_or_default();
+        let home = env::var("HOME").unwrap_or_default();
+        let extras = [
+            format!("{home}/.local/bin"),
+            "/usr/local/bin".to_string(),
+            "/usr/bin".to_string(),
+            "/bin".to_string(),
+        ];
+        let mut parts: Vec<&str> = current.split(':').collect();
+        for extra in &extras {
+            if !parts.contains(&extra.as_str()) {
+                parts.push(extra.as_str());
+            }
+        }
+        parts.join(":")
+    };
+
     let mut cmd = Command::new("cmake");
     cmd.arg("-S")
         .arg(get_depthai_core_root().clone())
@@ -1846,6 +1870,7 @@ fn cmake_build_depthai_core(path: PathBuf) -> Option<PathBuf> {
         ))
         .arg("-G")
         .arg(generator)
+        .env("PATH", &augmented_path)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
 
@@ -1860,6 +1885,7 @@ fn cmake_build_depthai_core(path: PathBuf) -> Option<PathBuf> {
         .arg(&path)
         .arg("--parallel")
         .arg(&parallel_builds)
+        .env("PATH", &augmented_path)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()

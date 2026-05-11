@@ -43,7 +43,7 @@ cargo doc --no-default-features --features docs
 | `docs` | Bindings-only mode for docs.rs; disables native build |
 | `hit` | Marker flag enabling hardware integration tests |
 | `rerun` | Enables rerun.io visualization in examples |
-| `latest`, `v3-3-0`, `v3-2-1`, `v3-2-0`, `v3-1-0` | Select DepthAI-Core version |
+| `latest`, `v3-6-1`, `v3-5-0`, `v3-4-0`, `v3-3-0`, `v3-2-1`, `v3-2-0`, `v3-1-0` | Select DepthAI-Core version |
 | `force-binding-regeneration` | Force regeneration of `autocxx` bindings |
 
 ## Key Conventions

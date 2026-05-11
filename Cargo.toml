@@ -85,9 +85,9 @@ imageproc = "0.26.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 autocxx.workspace = true
-rerun = { version = "0.28.2", default-features = false, features = ["sdk", "server", "web_viewer"], optional = true }
+rerun = { version = ">=0.28.2", default-features = false, features = ["sdk", "server", "web_viewer"], optional = true }
 tokio = { version = "1.49.0", features = ["rt-multi-thread", "time", "net"], optional = true }
-re_web_viewer_server = { version = "0.28.2", optional = true }
+re_web_viewer_server = { version = ">=0.28.2", optional = true }
 
 [lib]
 doctest = false

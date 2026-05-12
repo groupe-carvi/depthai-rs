@@ -2101,7 +2101,7 @@ dependencies = [
 
 [[package]]
 name = "depthai"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "autocxx",
  "depthai-macros",
@@ -2119,7 +2119,7 @@ dependencies = [
 
 [[package]]
 name = "depthai-macros"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2128,7 +2128,7 @@ dependencies = [
 
 [[package]]
 name = "depthai-sys"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "autocxx",
  "autocxx-build",

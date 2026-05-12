@@ -7,7 +7,7 @@ members = [
 
 [workspace.package]
 edition = "2024"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Groupe CARVI Inc."]
 license = "MIT"
 repository = "https://github.com/groupe-carvi/depthai-rs"

@@ -64,8 +64,31 @@ const DEPTHAI_CORE_REPOSITORY: &str = "https://github.com/luxonis/depthai-core.g
 // Latest DepthAI-Core version supported by this crate.
 const LATEST_SUPPORTED_DEPTHAI_CORE_TAG: DepthaiCoreVersion = DepthaiCoreVersion::V3_6_1;
 
-const OPENCV_WIN_PREBUILT_URL: &str =
-    "https://github.com/opencv/opencv/releases/download/4.11.0/opencv-4.11.0-windows.exe";
+/// Windows-only OpenCV prebuilt runtime selection.
+///
+/// Each DepthAI-Core Windows release is compiled against a specific OpenCV version. This
+/// struct captures the version string (used to build the download URL) and the name of the
+/// primary "world" DLL that must be staged alongside `depthai-core.dll` at runtime.
+///
+/// **Maintenance note:** when bumping `LATEST_SUPPORTED_DEPTHAI_CORE_TAG`, verify which
+/// OpenCV version the new DepthAI-Core Windows DLL was compiled against
+/// (`dumpbin /dependents depthai-core.dll`) and update `windows_opencv_runtime()` below.
+struct WindowsOpenCvRuntime {
+    /// OpenCV release version string, e.g. `"4.13.0"`.
+    opencv_version: &'static str,
+    /// Name of the primary world DLL, e.g. `"opencv_world4130.dll"`.
+    world_dll: &'static str,
+}
+
+impl WindowsOpenCvRuntime {
+    /// Returns the GitHub Releases URL for this OpenCV version's Windows installer.
+    fn url(&self) -> String {
+        format!(
+            "https://github.com/opencv/opencv/releases/download/{v}/opencv-{v}-windows.exe",
+            v = self.opencv_version,
+        )
+    }
+}
 
 macro_rules! println_build {
     ($($tokens:tt)*) => {
@@ -96,6 +119,35 @@ impl DepthaiCoreVersion {
             DepthaiCoreVersion::V3_2_1 => "v3.2.1",
             DepthaiCoreVersion::V3_2_0 => "v3.2.0",
             DepthaiCoreVersion::V3_1_0 => "v3.1.0",
+        }
+    }
+
+    /// Returns the Windows prebuilt OpenCV runtime metadata for this DepthAI-Core version.
+    ///
+    /// The mapping reflects which OpenCV version upstream used when compiling the prebuilt
+    /// `depthai-core.dll` for each tag. Verify with `dumpbin /dependents depthai-core.dll`
+    /// (or equivalent) when adding or upgrading a supported DepthAI-Core tag.
+    #[cfg(all(feature = "native", feature = "opencv-download"))]
+    fn windows_opencv_runtime(self) -> WindowsOpenCvRuntime {
+        match self {
+            DepthaiCoreVersion::Latest => {
+                LATEST_SUPPORTED_DEPTHAI_CORE_TAG.windows_opencv_runtime()
+            }
+            // depthai-core v3.6.1 was compiled against OpenCV 4.13.0.
+            DepthaiCoreVersion::V3_6_1 => WindowsOpenCvRuntime {
+                opencv_version: "4.13.0",
+                world_dll: "opencv_world4130.dll",
+            },
+            // All older supported tags were compiled against OpenCV 4.11.0.
+            DepthaiCoreVersion::V3_5_0
+            | DepthaiCoreVersion::V3_4_0
+            | DepthaiCoreVersion::V3_3_0
+            | DepthaiCoreVersion::V3_2_1
+            | DepthaiCoreVersion::V3_2_0
+            | DepthaiCoreVersion::V3_1_0 => WindowsOpenCvRuntime {
+                opencv_version: "4.11.0",
+                world_dll: "opencv_world4110.dll",
+            },
         }
     }
 }
@@ -1182,31 +1234,84 @@ fn strip_sfx_header(exe_path: &Path, out_7z_path: &Path) {
         .expect("Failed to write stripped .7z file");
 }
 
+/// Removes `opencv_world*.dll` files from `bin_dir` whose version does not match
+/// `selected_world_dll`.  Both the release (`opencv_world4130.dll`) and the debug variant
+/// (`opencv_world4130d.dll`) of the *selected* DLL are preserved; all other files matching
+/// the `opencv_world*.dll` pattern are deleted.
+///
+/// This prevents stale artifacts from a previous DepthAI-Core build (e.g. `opencv_world4110.dll`
+/// after upgrading to a `v3.6.1` build that requires `opencv_world4130.dll`) from being staged
+/// into the target directory and confusing the Windows DLL loader at runtime.
+#[cfg(all(feature = "native", feature = "opencv-download"))]
+fn remove_stale_opencv_world_dlls(bin_dir: &Path, selected_world_dll: &str) {
+    // Build a stem shared by both the release and debug variants of the selected DLL,
+    // e.g. "opencv_world4130.dll" -> "opencv_world4130".  Any opencv_world*.dll whose
+    // lowercase name does NOT start with this stem is considered stale and is removed.
+    let selected_stem = selected_world_dll
+        .strip_suffix(".dll")
+        .unwrap_or(selected_world_dll)
+        .to_ascii_lowercase();
+
+    if let Ok(entries) = fs::read_dir(bin_dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if !p.is_file() {
+                continue;
+            }
+            let fname = match p.file_name().and_then(|n| n.to_str()) {
+                Some(n) => n.to_ascii_lowercase(),
+                None => continue,
+            };
+            if fname.starts_with("opencv_world")
+                && fname.ends_with(".dll")
+                && !fname.starts_with(selected_stem.as_str())
+            {
+                println_build!("Removing stale OpenCV world DLL: {}", p.display());
+                let _ = fs::remove_file(&p);
+            }
+        }
+    }
+}
+
 #[cfg(all(feature = "native", feature = "opencv-download"))]
 fn download_and_prepare_opencv() {
     if !cfg!(target_os = "windows") {
         return;
     }
 
-    let opencv_dll_file = "opencv_world4110.dll";
+    let opencv_runtime = selected_depthai_core_version().windows_opencv_runtime();
+    let opencv_dll_file = opencv_runtime.world_dll;
+    let opencv_url = opencv_runtime.url();
+    println_build!(
+        "DepthAI-Core tag {} -> OpenCV {} ({})",
+        selected_depthai_core_tag(),
+        opencv_runtime.opencv_version,
+        opencv_dll_file,
+    );
 
     {
-        let dll = get_depthai_core_root()
-            .join("bin")
-            .join("opencv_world4110.dll");
-
+        let bin_dir = get_depthai_core_root().join("bin");
+        let dll = bin_dir.join(opencv_dll_file);
         if dll.exists() {
-            println_build!("opencv_world4110.dll already present, skipping download.");
+            println_build!(
+                "{} already present in depthai-core/bin, skipping download.",
+                opencv_dll_file
+            );
+            // Even when skipping the download, remove stale world DLLs from a previous
+            // version build so they are not staged alongside the correct one.
+            remove_stale_opencv_world_dlls(&bin_dir, opencv_dll_file);
             return;
         }
     }
 
     println_build!(
-        "opencv_world4110.dll not found, proceeding to download OpenCV prebuilt binaries..."
+        "{} not found, proceeding to download OpenCV {} prebuilt binaries...",
+        opencv_dll_file,
+        opencv_runtime.opencv_version,
     );
 
     let extraction_dir = BUILD_FOLDER_PATH.join("opencv_download");
-    let opencv_exe_path = extraction_dir.join(OPENCV_WIN_PREBUILT_URL.split('/').last().unwrap());
+    let opencv_exe_path = extraction_dir.join(opencv_url.split('/').last().unwrap());
     // The OpenCV SFX archive typically contains a top-level "opencv/" folder.
     // We extract into `extraction_dir` and then locate the DLL under it.
     let extract_path = extraction_dir.join("opencv");
@@ -1237,9 +1342,9 @@ fn download_and_prepare_opencv() {
             println_build!("Extraction directory already exists: {:?}", extraction_dir);
         }
 
-        println_build!("Downloading OpenCV from {}", OPENCV_WIN_PREBUILT_URL);
+        println_build!("Downloading OpenCV from {}", opencv_url);
 
-        let downloaded = download_file(OPENCV_WIN_PREBUILT_URL, &extraction_dir)
+        let downloaded = download_file(&opencv_url, &extraction_dir)
             .expect("Failed to download OpenCV prebuilt binary");
 
         fs::rename(downloaded, &opencv_exe_path).expect("Failed to rename downloaded OpenCV exe");
@@ -1301,7 +1406,7 @@ fn download_and_prepare_opencv() {
                                 "Re-downloading OpenCV exe and retrying (to avoid checksum failures)..."
                             );
                             let _ = fs::remove_file(&opencv_exe_path);
-                            let downloaded = download_file(OPENCV_WIN_PREBUILT_URL, &extraction_dir)
+                            let downloaded = download_file(&opencv_url, &extraction_dir)
                                 .expect("Failed to re-download OpenCV prebuilt binary");
                             fs::rename(downloaded, &opencv_exe_path)
                                 .expect("Failed to rename downloaded OpenCV exe");
@@ -1348,8 +1453,13 @@ fn download_and_prepare_opencv() {
     let dest_bin_dir = get_depthai_core_root().join("bin");
     let _ = fs::create_dir_all(&dest_bin_dir);
 
+    // Remove stale opencv_world*.dll files left over from a previous DepthAI-Core version
+    // before staging the correct one.  Companion DLLs (e.g. opencv_world4130d.dll) that
+    // share the same version stem are preserved.
+    remove_stale_opencv_world_dlls(&dest_bin_dir, opencv_dll_file);
+
     // Always copy the main opencv_world DLL.
-    let dest_path = dest_bin_dir.join(&opencv_dll_file);
+    let dest_path = dest_bin_dir.join(opencv_dll_file);
     fs::copy(&dll_path, &dest_path).expect("Failed to copy OpenCV DLL");
     println_build!("OpenCV DLL copied to {:?}", dest_path);
 

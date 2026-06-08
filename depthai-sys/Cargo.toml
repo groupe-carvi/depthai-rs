@@ -63,11 +63,17 @@ rustdoc-args = ["--cfg", "docsrs"]
 [build-dependencies]
 autocxx-build.workspace = true
 cxx-build.workspace = true
-cc = "1.2.51"
-cmake = { version = "0.1.57", optional = true }
+# cxx-gen generates the C++ side of the cxx bridge inside autocxx. Its ABI version (`0.7.N`)
+# must match the Rust-side cxx / cxxbridge-macro (`1.0.N`); otherwise downstream consumers hit
+# `unresolved external symbol dai$cxxbridge1$<N>$...` linker errors. autocxx only requires
+# `cxx-gen = "^0.7.78"`, which lets it float independently of the pinned `cxx`, so we pin it
+# here in lockstep with the `cxx`/`cxx-build` versions in the workspace manifest.
+cxx-gen = "=0.7.194"
+cc = "1.2.63"
+cmake = { version = "0.1.58", optional = true }
 num_cpus = { version = "1.17.0", optional = true }
 walkdir = { version = "2.5.0", optional = true }
-once_cell = "1.21.3"
+once_cell = "1.21.4"
 zip-extensions = { version = "0.13.0", optional = true }
 reqwest = { version = "0.13.1", default-features = false, features = ["blocking", "json", "native-tls", "http2"], optional = true }
 sevenz-rust2 = { version = "0.20.0", optional = true }

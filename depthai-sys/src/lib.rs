@@ -341,6 +341,20 @@ include_cpp! {
     generate!("dai::dai_camera_set_image_orientation")
     generate!("dai::dai_camera_get_image_orientation")
 
+    // ModelZoo
+    generate!("dai::dai_nn_model_description_from_yaml_file_json")
+    generate!("dai::dai_nn_model_description_save_to_yaml_file_json")
+    generate!("dai::dai_modelzoo_set_health_endpoint")
+    generate!("dai::dai_modelzoo_get_health_endpoint")
+    generate!("dai::dai_modelzoo_set_download_endpoint")
+    generate!("dai::dai_modelzoo_get_download_endpoint")
+    generate!("dai::dai_modelzoo_set_default_cache_path")
+    generate!("dai::dai_modelzoo_get_default_cache_path")
+    generate!("dai::dai_modelzoo_set_default_models_path")
+    generate!("dai::dai_modelzoo_get_default_models_path")
+    generate!("dai::dai_get_model_from_zoo_json")
+    generate!("dai::dai_download_models_from_zoo")
+
     safety!(unsafe_ffi)
 }
 

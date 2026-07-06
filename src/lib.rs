@@ -535,6 +535,7 @@ pub use image_manip::{
     Backend as ImageManipBackend, Colormap, ImageManipConfig, ImageManipNode, ImageManipResizeMode,
     PerformanceMode as ImageManipPerformanceMode,
 };
+pub use model_zoo::{NNModelDescription, ProgressFormat, SlugComponents, ZooFetchOptions};
 pub use output::{Input, Output};
 pub use pointcloud::{Point3fRGBA, PointCloudData};
 pub use queue::{Datatype, DatatypeEnum, InputQueue, MessageQueue, QueueCallbackHandle};

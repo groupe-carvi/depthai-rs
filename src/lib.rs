@@ -519,8 +519,7 @@ pub mod video_encoder;
 pub use error::{DepthaiError, Result};
 pub use pipeline::{CreateInPipeline, CreateInPipelineWith, DeviceNode, DeviceNodeWithParams};
 
-pub use device::Device;
-pub use device::DevicePlatform;
+pub use device::{Device, DevicePlatform, connected_device_ids};
 pub use pipeline::Pipeline;
 
 pub use output::{Output, Input};

@@ -21,6 +21,8 @@ include_cpp! {
 
     // Device functions
     generate!("dai::dai_device_new")
+    generate!("dai::dai_device_new_with_device_id")
+    generate!("dai::dai_get_connected_device_ids")
     generate!("dai::dai_device_clone")
     generate!("dai::dai_device_delete")
     generate!("dai::dai_device_is_closed")

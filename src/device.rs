@@ -165,15 +165,12 @@ unsafe impl Sync for Device {}
 /// Returns an error if the XLink enumeration itself fails.
 pub fn connected_device_ids() -> crate::error::Result<Vec<String>> {
     clear_error_flag();
-    let raw = unsafe { depthai::dai_get_connected_device_ids() };
+    let raw = depthai::dai_get_connected_device_ids();
     if raw.is_null() {
         return Err(last_error("failed to query connected device IDs"));
     }
-    let s = unsafe {
-        let s = CStr::from_ptr(raw).to_string_lossy().into_owned();
-        depthai::dai_free_cstring(raw);
-        s
-    };
+    let s = unsafe { CStr::from_ptr(raw) }.to_string_lossy().into_owned();
+    unsafe { depthai::dai_free_cstring(raw) };
     if s.is_empty() {
         return Ok(Vec::new());
     }

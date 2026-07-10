@@ -83,11 +83,41 @@ impl NNModelDescription {
             ..Default::default()
         }
     }
+
+    /// Load a model description from a yaml file, resolving against an explicit
+    /// models path.
+    ///
+    /// FFI: maps to depthai-core `NNModelDescription::fromYamlFile(modelName, modelsPath)`.
+    pub fn from_yaml_file(
+        model_name: impl AsRef<str>,
+        models_path: impl AsRef<Path>,
+    ) -> Result<Self> {
+        clear_error_flag();
+        let name_c = CString::new(model_name.as_ref())
+            .map_err(|_| last_error("from_yaml_file: model name contains NUL byte"))?;
+        let path_str = models_path
+            .as_ref()
+            .to_str()
+            .ok_or_else(|| last_error("from_yaml_file: models path must be valid UTF-8"))?;
+        let path_c = CString::new(path_str)
+            .map_err(|_| last_error("from_yaml_file: models path contains NUL byte"))?;
+        let ptr = unsafe {
+            depthai::dai_nn_model_description_from_yaml_file_json(name_c.as_ptr(), path_c.as_ptr())
+        };
+        let json = take_owned_string(ptr, "from_yaml_file: failed to load model description")?;
+        serde_json::from_str::<Self>(&json).map_err(|e| {
+            DepthaiError::new(format!(
+                "from_yaml_file: invalid JSON from depthai-core: {e}"
+            ))
+        })
+    }
+
     /// Load a model description from a yaml file, using the default models path
     /// (env var `DEPTHAI_ZOO_MODELS_PATH` or the modelzoo default).
+    /// Workaround for C++ method with default parameter.
     ///
     /// FFI: maps to depthai-core `NNModelDescription::fromYamlFile(modelName, "")`.
-    pub fn from_yaml_file(model_name: impl AsRef<str>) -> Result<Self> {
+    pub fn from_yaml_file_default(model_name: impl AsRef<str>) -> Result<Self> {
         clear_error_flag();
         let name_c = CString::new(model_name.as_ref())
             .map_err(|_| last_error("from_yaml_file: model name contains NUL byte"))?;
@@ -103,34 +133,6 @@ impl NNModelDescription {
         serde_json::from_str::<Self>(&json).map_err(|e| {
             DepthaiError::new(format!(
                 "from_yaml_file: invalid JSON from depthai-core: {e}"
-            ))
-        })
-    }
-
-    /// Load a model description from a yaml file, resolving against an explicit
-    /// models path. (Workaround for C++ method with default parameter)
-    ///
-    /// FFI: maps to depthai-core `NNModelDescription::fromYamlFile(modelName, modelsPath)`.
-    pub fn from_yaml_file_in(
-        model_name: impl AsRef<str>,
-        models_path: impl AsRef<Path>,
-    ) -> Result<Self> {
-        clear_error_flag();
-        let name_c = CString::new(model_name.as_ref())
-            .map_err(|_| last_error("from_yaml_file_in: model name contains NUL byte"))?;
-        let path_str = models_path
-            .as_ref()
-            .to_str()
-            .ok_or_else(|| last_error("from_yaml_file_in: models path must be valid UTF-8"))?;
-        let path_c = CString::new(path_str)
-            .map_err(|_| last_error("from_yaml_file_in: models path contains NUL byte"))?;
-        let ptr = unsafe {
-            depthai::dai_nn_model_description_from_yaml_file_json(name_c.as_ptr(), path_c.as_ptr())
-        };
-        let json = take_owned_string(ptr, "from_yaml_file_in: failed to load model description")?;
-        serde_json::from_str::<Self>(&json).map_err(|e| {
-            DepthaiError::new(format!(
-                "from_yaml_file_in: invalid JSON from depthai-core: {e}"
             ))
         })
     }
@@ -209,7 +211,7 @@ impl ProgressFormat {
 
     /// Same tokens as [`ProgressFormat::as_str`], pre-terminated as a `&CStr`
     /// so it can be passed straight across the FFI boundary without allocating.
-    pub fn as_c_str(&self) -> &'static CStr {
+    fn as_c_str(&self) -> &'static CStr {
         match self {
             ProgressFormat::None => c"none",
             ProgressFormat::Json => c"json",
@@ -891,16 +893,16 @@ NNModelDescription [
     // ----- FFI error-path behaviour (no hardware required) -----
 
     #[test]
-    fn from_yaml_file_missing_file_returns_err() {
+    fn from_yaml_file_default_missing_file_returns_err() {
         // A model name that cannot resolve to a file must return Err, not panic.
-        let result = NNModelDescription::from_yaml_file("nonexistent_model_zzz");
+        let result = NNModelDescription::from_yaml_file_default("nonexistent_model_zzz");
         assert!(result.is_err());
     }
 
     #[test]
-    fn from_yaml_file_in_missing_file_returns_err() {
+    fn from_yaml_file_missing_file_returns_err() {
         // Even with an explicit models_path the absent file must return Err.
-        let result = NNModelDescription::from_yaml_file_in("nonexistent_model_zzz", "/tmp");
+        let result = NNModelDescription::from_yaml_file("nonexistent_model_zzz", "/tmp");
         assert!(result.is_err());
     }
 
@@ -947,8 +949,8 @@ NNModelDescription [
 
             // Use the model_name = yaml file name, models_path = tmp_dir
             // C++ fromYamlFile(model_name, models_path) looks up models_path/model_name
-            let loaded = NNModelDescription::from_yaml_file_in("test_model.yaml", &tmp_dir)
-                .expect("from_yaml_file_in should succeed");
+            let loaded = NNModelDescription::from_yaml_file("test_model.yaml", &tmp_dir)
+                .expect("from_yaml_file should succeed");
 
             assert_eq!(loaded.model, original.model);
             assert_eq!(loaded.platform, original.platform);
@@ -965,17 +967,17 @@ NNModelDescription [
         }
 
         #[test]
-        fn from_yaml_file_missing_returns_err() {
+        fn from_yaml_file_default_missing_returns_err() {
             // A definitely-missing model name must yield Err, not panic.
-            let result = NNModelDescription::from_yaml_file("__nonexistent_model_zzz__");
+            let result = NNModelDescription::from_yaml_file_default("__nonexistent_model_zzz__");
             assert!(result.is_err(), "expected Err for missing model, got Ok");
         }
 
         #[test]
-        fn from_yaml_file_in_missing_file_returns_err() {
+        fn from_yaml_file_missing_file_returns_err() {
             // Explicit models_path that doesn't contain the model must yield Err.
             let result =
-                NNModelDescription::from_yaml_file_in("__nonexistent_model_zzz__", env::temp_dir());
+                NNModelDescription::from_yaml_file("__nonexistent_model_zzz__", env::temp_dir());
             assert!(
                 result.is_err(),
                 "expected Err for missing model in temp dir"

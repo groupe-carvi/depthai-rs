@@ -10,6 +10,16 @@
 mod hardware_integration_tests {
     use depthai::{DaiError, Device, Pipeline, PipelineConfig};
 
+    fn device_id() -> String {
+        if let Ok(id) = std::env::var("DAI_TEST_DEVICE_ID") {
+            return id;
+        }
+        let ids = depthai::connected_device_ids().expect("failed to enumerate connected OAK boards");
+        ids.into_iter()
+            .next()
+            .expect("no OAK board connected; plug one in or set DAI_TEST_DEVICE_ID")
+    }
+
     #[test]
     fn test_device_creation_with_hardware() {
         // This test requires actual DepthAI hardware to be connected
@@ -73,5 +83,49 @@ mod hardware_integration_tests {
         assert!(connected, "Device should be connected via FFI");
 
         println!("Device FFI connection test passed with hardware");
+    }
+
+    #[test]
+    fn test_device_new_with_device_id() {
+        let device = Device::new_with_device_id(&device_id()).expect("failed to open device by device ID");
+        assert!(device.is_connected());
+        assert!(device.platform().is_ok());
+    }
+
+    /// A second call with the same device ID must reuse the existing connection rather than failing with "device already in use"
+    #[test]
+    fn test_device_new_with_device_id_reuses_connection() {
+        let id = device_id();
+        let d1 = Device::new_with_device_id(&id).expect("first open");
+        let d2 = Device::new_with_device_id(&id).expect("second open must reuse, not fail");
+        assert!(d1.is_connected());
+        assert!(d2.is_connected());
+    }
+
+    /// A nonexistent device ID must return an error, not panic or hang
+    #[test]
+    fn test_device_new_with_invalid_device_id_fails() {
+        let result = Device::new_with_device_id("00000000000000");
+        assert!(result.is_err(), "nonexistent device ID must return an error");
+    }
+
+    /// Opening via the default constructor then by device ID must reuse the same connection,
+    /// not attempt a second exclusive connection to the same board
+    #[test]
+    fn test_default_then_device_id_reuses_connection() {
+        let d1 = Device::new().expect("default open");
+        let d2 = Device::new_with_device_id(&device_id())
+            .expect("device_id open must reuse default connection");
+        assert!(d1.is_connected());
+        assert!(d2.is_connected());
+    }
+
+    #[test]
+    fn test_connected_device_ids_finds_board() {
+        let ids = depthai::connected_device_ids().expect("failed to enumerate boards");
+        assert!(!ids.is_empty(), "at least one OAK board must be connected");
+        for id in &ids {
+            assert!(!id.is_empty(), "device ID must not be empty");
+        }
     }
 }

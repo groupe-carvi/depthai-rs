@@ -83,10 +83,15 @@ typedef struct DaiPoint3fRGBA {
 
 // Low-level device operations
 API DaiDevice dai_device_new();
+API DaiDevice dai_device_new_with_device_id(const char* device_id);
 API DaiDevice dai_device_clone(DaiDevice device);
 API void dai_device_delete(DaiDevice device);
 API bool dai_device_is_closed(DaiDevice device);
 API void dai_device_close(DaiDevice device);
+// Returns a newline-delimited list of device IDs for all connected boards
+// Returns an empty string (not null) when none are connected
+// Caller must free with dai_free_cstring()
+API char* dai_get_connected_device_ids();
 
 // Low-level pipeline operations  
 API DaiPipeline dai_pipeline_new();

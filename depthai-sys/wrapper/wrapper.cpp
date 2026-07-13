@@ -184,36 +184,24 @@ class RustThreadedHostNode : public dai::NodeCRTP<dai::node::ThreadedHostNode, R
 // To mirror that behavior across the C ABI, we represent `DaiDevice` as a pointer to a
 // heap-allocated `std::shared_ptr<dai::Device>`.
 //
-// We also keep a process-wide default device which `dai_device_new()` returns (or creates).
+// We keep a process-wide default device which `dai_device_new()` returns (or creates),
+// and a per-device-ID map for devices opened by `dai_device_new_with_device_id()`.
+// Both are protected by the same mutex so callers targeting the same board share one connection.
 static std::mutex g_device_mutex;
 static std::weak_ptr<dai::Device> g_default_device;
+static std::unordered_map<std::string, std::weak_ptr<dai::Device>> g_named_devices;
 
-// Some XLink versions/platforms can report device state as X_LINK_ANY_STATE when queried with
-// X_LINK_ANY_STATE, which breaks DepthAI's "find any available device" logic.
-// To be more robust in our C ABI, we query per concrete state in priority order and then
-// construct `dai::Device` from the returned `DeviceInfo`.
+// Peek which board dai::Device() would select without opening it, so we can check g_named_devices
+// first. Without this we would open a second connection to the same board and get "already in use".
+// Uses X_LINK_ANY_STATE to match depthai's own default-device selection logic.
 static bool select_first_device_info(dai::DeviceInfo& out) {
-    // Prefer devices that can be booted/connected immediately.
-    const XLinkDeviceState_t states[] = {
-        X_LINK_UNBOOTED,
-        X_LINK_BOOTLOADER,
-        X_LINK_FLASH_BOOTED,
-        X_LINK_GATE,
-        X_LINK_GATE_SETUP,
-        X_LINK_BOOTED,
-    };
-
-    for(const auto state : states) {
-        try {
-            auto devices = dai::XLinkConnection::getAllConnectedDevices(state, /*skipInvalidDevices=*/true);
-            if(!devices.empty()) {
-                out = devices.front();
-                return true;
-            }
-        } catch(...) {
-            // Ignore and continue to next state.
+    try {
+        auto devices = dai::XLinkConnection::getAllConnectedDevices(X_LINK_ANY_STATE, /*skipInvalidDevices=*/true);
+        if(!devices.empty()) {
+            out = devices.front();
+            return true;
         }
-    }
+    } catch(...) {}
     return false;
 }
 
@@ -283,23 +271,19 @@ DaiDevice dai_device_new() {
         dai_clear_last_error();
         std::lock_guard<std::mutex> lock(g_device_mutex);
 
-        // Reuse existing default device if it is still alive and not closed.
+        // Fast path: reuse existing default device if still alive and not closed.
         if(auto existing = g_default_device.lock()) {
             try {
                 if(!existing->isClosed()) {
                     return static_cast<DaiDevice>(new std::shared_ptr<dai::Device>(existing));
                 }
-            } catch(...) {
-                // If isClosed throws for some reason, fall back to creating a new device.
-            }
+            } catch(...) {}
         }
 
-        // Create new default device.
-        // Instead of calling `dai::Device()` (which internally uses getAnyAvailableDevice),
-        // explicitly select a concrete state/device and construct from DeviceInfo.
+        // Pick the "first available" board deterministically, then check the per-device-ID
+        // cache before opening a new connection (handles new_with_device_id() called first).
         dai::DeviceInfo info;
         if(!select_first_device_info(info)) {
-            // Mirror DepthAI's wording as closely as possible.
             auto numConnected = dai::DeviceBase::getAllAvailableDevices().size();
             if(numConnected > 0) {
                 throw std::runtime_error(std::string("No available devices (") + std::to_string(numConnected) +
@@ -308,11 +292,95 @@ DaiDevice dai_device_new() {
             throw std::runtime_error("No available devices");
         }
 
+        // Check the named cache for this specific board before opening a new connection.
+        if(!info.deviceId.empty()) {
+            auto it = g_named_devices.find(info.deviceId);
+            if(it != g_named_devices.end()) {
+                if(auto existing = it->second.lock()) {
+                    try {
+                        if(!existing->isClosed()) {
+                            g_default_device = existing;
+                            return static_cast<DaiDevice>(new std::shared_ptr<dai::Device>(existing));
+                        }
+                    } catch(...) {}
+                }
+            }
+        }
+
         auto created = std::make_shared<dai::Device>(info, dai::DeviceBase::DEFAULT_USB_SPEED);
         g_default_device = created;
+        // Cross-register so dai_device_new_with_device_id() can reuse this connection.
+        // getDeviceInfo().deviceId is a field set at connect time, it does not do any RPC (hence no IO under the mutex)
+        std::string dev_id = created->getDeviceInfo().deviceId;
+        if(!dev_id.empty()) {
+            g_named_devices[dev_id] = created;
+        }
         return static_cast<DaiDevice>(new std::shared_ptr<dai::Device>(created));
     } catch (const std::exception& e) {
         last_error = std::string("dai_device_new failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+DaiDevice dai_device_new_with_device_id(const char* device_id) {
+    try {
+        dai_clear_last_error();
+        if(!device_id || device_id[0] == '\0') {
+            last_error = "dai_device_new_with_device_id: null or empty device_id";
+            return nullptr;
+        }
+        std::string device_id_str(device_id);
+        std::lock_guard<std::mutex> lock(g_device_mutex);
+
+        // Reuse existing connection for this device ID if still alive and not closed.
+        auto it = g_named_devices.find(device_id_str);
+        if(it != g_named_devices.end()) {
+            if(auto existing = it->second.lock()) {
+                try {
+                    if(!existing->isClosed()) {
+                        return static_cast<DaiDevice>(new std::shared_ptr<dai::Device>(existing));
+                    }
+                } catch(...) {}
+            }
+        }
+
+        // Also check the default device: dai_device_new() may have opened this board
+        // before we were called, but it only registered in g_default_device, not here.
+        if(auto existing = g_default_device.lock()) {
+            try {
+                if(!existing->isClosed() && existing->getDeviceInfo().deviceId == device_id_str) {
+                    g_named_devices[device_id_str] = existing;
+                    return static_cast<DaiDevice>(new std::shared_ptr<dai::Device>(existing));
+                }
+            } catch(...) {}
+        }
+
+        dai::DeviceInfo info(device_id_str);
+        auto created = std::make_shared<dai::Device>(info, dai::DeviceBase::DEFAULT_USB_SPEED);
+        g_named_devices[device_id_str] = created;
+        return static_cast<DaiDevice>(new std::shared_ptr<dai::Device>(created));
+    } catch (const std::exception& e) {
+        last_error = std::string("dai_device_new_with_device_id failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+// Returns a newline-delimited list of device IDs for all connected OAK boards
+// Returns an empty string when none are connected
+char* dai_get_connected_device_ids() {
+    try {
+        dai_clear_last_error();
+        auto devices = dai::XLinkConnection::getAllConnectedDevices(X_LINK_ANY_STATE, /*skipInvalidDevices=*/true);
+        std::string result;
+        for(const auto& dev : devices) {
+            if(!dev.deviceId.empty()) {
+                if(!result.empty()) result += '\n';
+                result += dev.deviceId;
+            }
+        }
+        return dai_string_to_cstring(result.c_str());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_get_connected_device_ids failed: ") + e.what();
         return nullptr;
     }
 }

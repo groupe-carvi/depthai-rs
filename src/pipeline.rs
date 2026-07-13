@@ -237,7 +237,11 @@ impl PipelineBuilder {
         } else if let Some(create_implicit_device) = self.create_implicit_device {
             Pipeline::new_with_implicit_device(create_implicit_device)?
         } else {
-            Pipeline::try_new()?
+            // Resolve the default device through our connection cache instead of letting the
+            // native implicit-device constructor rediscover stale network entries. Binding the
+            // pipeline explicitly also makes it share an existing default connection.
+            let device = Device::new()?;
+            Pipeline::create_with_device(&device)?
         };
 
         if let Some(v) = self.xlink_chunk_size {

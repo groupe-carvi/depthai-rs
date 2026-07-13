@@ -193,13 +193,32 @@ static std::unordered_map<std::string, std::weak_ptr<dai::Device>> g_named_devic
 
 // Peek which board dai::Device() would select without opening it, so we can check g_named_devices
 // first. Without this we would open a second connection to the same board and get "already in use".
-// Uses X_LINK_ANY_STATE to match depthai's own default-device selection logic.
+// Only use devices reported as available: XLink's ANY_STATE enumeration can include stale network
+// entries that are visible in discovery but cannot actually be opened.
 static bool select_first_device_info(dai::DeviceInfo& out) {
     try {
-        auto devices = dai::XLinkConnection::getAllConnectedDevices(X_LINK_ANY_STATE, /*skipInvalidDevices=*/true);
+        auto devices = dai::DeviceBase::getAllAvailableDevices();
         if(!devices.empty()) {
             out = devices.front();
             return true;
+        }
+
+        // If every board is already in use, prefer a live cached connection over reporting that
+        // no device is available. This covers a device opened by ID before the default constructor.
+        auto connected = dai::XLinkConnection::getAllConnectedDevices(
+            X_LINK_ANY_STATE, /*skipInvalidDevices=*/true);
+        for(const auto& info : connected) {
+            if(info.deviceId.empty()) continue;
+            auto it = g_named_devices.find(info.deviceId);
+            if(it == g_named_devices.end()) continue;
+            if(auto existing = it->second.lock()) {
+                try {
+                    if(!existing->isClosed()) {
+                        out = info;
+                        return true;
+                    }
+                } catch(...) {}
+            }
         }
     } catch(...) {}
     return false;

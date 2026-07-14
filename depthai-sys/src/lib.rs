@@ -78,6 +78,8 @@ include_cpp! {
     generate!("dai::dai_pipeline_create_node_by_name")
     generate!("dai::dai_node_get_output")
     generate!("dai::dai_node_get_input")
+    generate!("dai::dai_node_get_or_create_input")
+    generate!("dai::dai_node_get_or_create_output")
     generate!("dai::dai_node_get_id")
     generate!("dai::dai_node_get_alias")
     generate!("dai::dai_node_set_alias")
@@ -95,6 +97,34 @@ include_cpp! {
     generate!("dai::dai_threaded_hostnode_create_input")
     generate!("dai::dai_threaded_hostnode_create_output")
     generate!("dai::dai_threaded_node_is_running")
+
+    // NeuralNetwork node helpers
+    generate!("dai::dai_neural_network_set_nn_archive")
+    generate!("dai::dai_neural_network_set_nn_archive_with_shaves")
+    generate!("dai::dai_neural_network_get_nn_archive")
+    generate!("dai::dai_neural_network_set_from_model_zoo_json")
+    generate!("dai::dai_neural_network_set_blob_path")
+    generate!("dai::dai_neural_network_set_blob_bytes")
+    generate!("dai::dai_neural_network_set_other_model_path")
+    generate!("dai::dai_neural_network_set_other_model_bytes")
+    generate!("dai::dai_neural_network_set_model_path")
+    generate!("dai::dai_neural_network_set_num_pool_frames")
+    generate!("dai::dai_neural_network_set_num_inference_threads")
+    generate!("dai::dai_neural_network_get_num_inference_threads")
+    generate!("dai::dai_neural_network_set_num_nce_per_inference_thread")
+    generate!("dai::dai_neural_network_set_num_shaves_per_inference_thread")
+    generate!("dai::dai_neural_network_set_backend")
+    generate!("dai::dai_neural_network_set_backend_properties_json")
+    generate!("dai::dai_neural_network_set_model_from_device_zoo")
+    generate!("dai::dai_neural_network_build_from_output")
+    generate!("dai::dai_neural_network_build_from_camera_model_json")
+    generate!("dai::dai_neural_network_build_from_camera_archive")
+
+    // Input configuration helpers
+    generate!("dai::dai_input_set_reuse_previous_message")
+    generate!("dai::dai_input_get_reuse_previous_message")
+    generate!("dai::dai_input_set_wait_for_message")
+    generate!("dai::dai_input_get_wait_for_message")
 
     // Device helpers
     generate!("dai::dai_device_get_platform")
@@ -257,6 +287,7 @@ include_cpp! {
     generate!("dai::dai_datatype_as_rgbd")
     generate!("dai::dai_datatype_as_buffer")
     generate!("dai::dai_datatype_as_message_group")
+    generate!("dai::dai_datatype_as_nndata")
     generate!("dai::dai_datatype_array_len")
     generate!("dai::dai_datatype_array_take")
     generate!("dai::dai_datatype_array_free")
@@ -355,6 +386,27 @@ include_cpp! {
     generate!("dai::dai_get_model_from_zoo_json")
     generate!("dai::dai_download_models_from_zoo")
 
+    // NNArchive helpers
+    generate!("dai::dai_nn_archive_new")
+    generate!("dai::dai_nn_archive_clone")
+    generate!("dai::dai_nn_archive_delete")
+    generate!("dai::dai_nn_archive_get_model_type")
+    generate!("dai::dai_nn_archive_get_input_size")
+    generate!("dai::dai_nn_archive_get_input_width")
+    generate!("dai::dai_nn_archive_get_input_height")
+    generate!("dai::dai_nn_archive_get_supported_platforms_json")
+
+    // NNData helpers
+    generate!("dai::dai_nndata_new")
+    generate!("dai::dai_nndata_get_all_layer_names_json")
+    generate!("dai::dai_nndata_has_layer")
+    generate!("dai::dai_nndata_get_tensor_info_json")
+    generate!("dai::dai_nndata_get_tensor_element_count")
+    generate!("dai::dai_nndata_get_tensor_byte_size")
+    generate!("dai::dai_nndata_copy_tensor_bytes")
+    generate!("dai::dai_nndata_copy_tensor_values")
+    generate!("dai::dai_nndata_add_tensor")
+
     safety!(unsafe_ffi)
 }
 
@@ -366,6 +418,7 @@ pub type DaiNode = *mut autocxx::c_void;
 pub type DaiCameraNode = *mut autocxx::c_void;
 pub type DaiOutput = *mut autocxx::c_void;
 pub type DaiInput = *mut autocxx::c_void;
+pub type DaiNNArchive = *mut autocxx::c_void;
 pub type DaiDataQueue = *mut autocxx::c_void;
 pub type DaiDatatype = *mut autocxx::c_void;
 pub type DaiImgFrame = *mut autocxx::c_void;

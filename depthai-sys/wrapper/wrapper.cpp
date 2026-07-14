@@ -3,15 +3,22 @@
 #include "depthai/pipeline/node/internal/XLinkIn.hpp"
 #include "depthai/pipeline/node/internal/XLinkOut.hpp"
 #include "depthai/build/version.hpp"
+#include "depthai/common/ModelType.hpp"
 #include "depthai/common/Point3fRGBA.hpp"
+#include "depthai/common/DeviceModelZoo.hpp"
+#include "depthai/nn_archive/NNArchive.hpp"
+#include "depthai/nn_archive/NNArchiveEntry.hpp"
+#include "depthai/pipeline/datatype/NNData.hpp"
+#include "depthai/pipeline/node/NeuralNetwork.hpp"
 #include "depthai/pipeline/datatype/PointCloudData.hpp"
 #include "depthai/pipeline/datatype/RGBDData.hpp"
 #include "depthai/pipeline/datatype/EncodedFrame.hpp"
 #include "XLink/XLink.h"
 #include "XLink/XLinkPublicDefines.h"
 
-// Some nodes were introduced in DepthAI-Core after v3.1.0.
-// For older versions, avoid referencing the missing types so this wrapper can still compile.
+// Some unrelated nodes were introduced after v3.1.0. Keep their existing guards so the rest of
+// the wrapper retains its historical behavior. NeuralNetwork bindings target the crate's last
+// supported core version (v3.6.1).
 #if defined(__has_include)
     #if __has_include(<depthai/pipeline/node/Rectification.hpp>)
         #include <depthai/pipeline/node/Rectification.hpp>
@@ -41,16 +48,28 @@
     #define DAI_HAS_NODE_GATE 0
 #endif
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <cstdlib>
+#include <filesystem>
 #include <limits>
+#include <map>
 #include <memory>
 #include <mutex>
+#include <nlohmann/json.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 #include <functional>
+
+#if defined(DEPTHAI_XTENSOR_SUPPORT)
+    #include <xtensor/containers/xadapt.hpp>
+    #include <xtensor/containers/xarray.hpp>
+#endif
 
 // Global error storage
 static std::string last_error = "";
@@ -1350,6 +1369,116 @@ DaiInput dai_node_get_input(DaiNode node, const char* group, const char* name) {
     } catch(const std::exception& e) {
         last_error = std::string("dai_node_get_input failed: ") + e.what();
         return nullptr;
+    }
+}
+
+DaiInput dai_node_get_or_create_input(DaiNode node, const char* map, const char* name) {
+    if(!node) {
+        last_error = "dai_node_get_or_create_input: null node";
+        return nullptr;
+    }
+    if(_dai_cstr_empty(map)) {
+        last_error = "dai_node_get_or_create_input: empty map";
+        return nullptr;
+    }
+    if(_dai_cstr_empty(name)) {
+        last_error = "dai_node_get_or_create_input: empty name";
+        return nullptr;
+    }
+    try {
+        auto n = static_cast<dai::Node*>(node);
+        auto* inputMap = n->getInputMapRef(std::string(map));
+        if(!inputMap) {
+            last_error = "dai_node_get_or_create_input: input map not found";
+            return nullptr;
+        }
+        auto& input = (*inputMap)[std::string(name)];
+        return static_cast<DaiInput>(&input);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_node_get_or_create_input failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+DaiOutput dai_node_get_or_create_output(DaiNode node, const char* map, const char* name) {
+    if(!node) {
+        last_error = "dai_node_get_or_create_output: null node";
+        return nullptr;
+    }
+    if(_dai_cstr_empty(map)) {
+        last_error = "dai_node_get_or_create_output: empty map";
+        return nullptr;
+    }
+    if(_dai_cstr_empty(name)) {
+        last_error = "dai_node_get_or_create_output: empty name";
+        return nullptr;
+    }
+    try {
+        auto n = static_cast<dai::Node*>(node);
+        auto* outputMap = n->getOutputMapRef(std::string(map));
+        if(!outputMap) {
+            last_error = "dai_node_get_or_create_output: output map not found";
+            return nullptr;
+        }
+        auto& output = (*outputMap)[std::string(name)];
+        return static_cast<DaiOutput>(&output);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_node_get_or_create_output failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+void dai_input_set_reuse_previous_message(DaiInput input, bool reuse) {
+    if(!input) {
+        last_error = "dai_input_set_reuse_previous_message: null input";
+        return;
+    }
+    try {
+        auto in = static_cast<dai::Node::Input*>(input);
+        in->setReusePreviousMessage(reuse);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_input_set_reuse_previous_message failed: ") + e.what();
+    }
+}
+
+bool dai_input_get_reuse_previous_message(DaiInput input) {
+    if(!input) {
+        last_error = "dai_input_get_reuse_previous_message: null input";
+        return false;
+    }
+    try {
+        auto in = static_cast<dai::Node::Input*>(input);
+        return in->getReusePreviousMessage();
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_input_get_reuse_previous_message failed: ") + e.what();
+        return false;
+    }
+}
+
+void dai_input_set_wait_for_message(DaiInput input, bool wait_for_message) {
+    if(!input) {
+        last_error = "dai_input_set_wait_for_message: null input";
+        return;
+    }
+    try {
+        auto in = static_cast<dai::Node::Input*>(input);
+        in->setWaitForMessage(wait_for_message);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_input_set_wait_for_message failed: ") + e.what();
+    }
+}
+
+bool dai_input_get_wait_for_message(DaiInput input) {
+    if(!input) {
+        last_error = "dai_input_get_wait_for_message: null input";
+        return false;
+    }
+    try {
+        auto in = static_cast<dai::Node::Input*>(input);
+        return in->getWaitForMessage();
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_input_get_wait_for_message failed: ") + e.what();
+        return false;
     }
 }
 
@@ -4924,6 +5053,1083 @@ bool dai_download_models_from_zoo(const char* path,
         last_error = std::string("dai_download_models_from_zoo failed: ") + e.what();
         return false;
     }
+}
+
+namespace {
+
+static dai::node::NeuralNetwork* _dai_as_neural_network(DaiNode node, const char* context) {
+    if(!node) {
+        last_error = std::string(context) + ": null node";
+        return nullptr;
+    }
+    auto base = static_cast<dai::Node*>(node);
+    auto nn = dynamic_cast<dai::node::NeuralNetwork*>(base);
+    if(!nn) {
+        last_error = std::string(context) + ": node is not a NeuralNetwork";
+        return nullptr;
+    }
+    return nn;
+}
+
+static std::shared_ptr<dai::NNArchive>* _dai_as_nn_archive(DaiNNArchive archive, const char* context) {
+    if(!archive) {
+        last_error = std::string(context) + ": null archive";
+        return nullptr;
+    }
+    auto ptr = static_cast<std::shared_ptr<dai::NNArchive>*>(archive);
+    if(!ptr->get() || !(*ptr)) {
+        last_error = std::string(context) + ": invalid archive";
+        return nullptr;
+    }
+    return ptr;
+}
+
+static std::shared_ptr<dai::NNData> _dai_as_nndata(DaiDatatype nndata, const char* context) {
+    if(!nndata) {
+        last_error = std::string(context) + ": null NNData";
+        return nullptr;
+    }
+    auto ptr = static_cast<std::shared_ptr<dai::ADatatype>*>(nndata);
+    if(!ptr->get() || !(*ptr)) {
+        last_error = std::string(context) + ": invalid datatype";
+        return nullptr;
+    }
+    auto result = std::dynamic_pointer_cast<dai::NNData>(*ptr);
+    if(!result) {
+        last_error = std::string(context) + ": datatype is not NNData";
+        return nullptr;
+    }
+    return result;
+}
+
+static nlohmann::json _dai_tensor_info_to_json(const dai::TensorInfo& info) {
+    return nlohmann::json{
+        {"order", static_cast<int>(info.order)},
+        {"dataType", static_cast<int>(info.dataType)},
+        {"numDimensions", info.numDimensions},
+        {"dims", info.dims},
+        {"strides", info.strides},
+        {"name", info.name},
+        {"offset", info.offset},
+        {"quantization", info.quantization},
+        {"qpScale", info.qpScale},
+        {"qpZp", info.qpZp},
+    };
+}
+
+static bool _dai_valid_tensor_data_type(int value) {
+    return value >= static_cast<int>(dai::TensorInfo::DataType::FP16)
+           && value <= static_cast<int>(dai::TensorInfo::DataType::FP64);
+}
+
+static bool _dai_valid_storage_order(int value) {
+    switch(value) {
+        case static_cast<int>(dai::TensorInfo::StorageOrder::NHWC):
+        case static_cast<int>(dai::TensorInfo::StorageOrder::NHCW):
+        case static_cast<int>(dai::TensorInfo::StorageOrder::NCHW):
+        case static_cast<int>(dai::TensorInfo::StorageOrder::HWC):
+        case static_cast<int>(dai::TensorInfo::StorageOrder::CHW):
+        case static_cast<int>(dai::TensorInfo::StorageOrder::WHC):
+        case static_cast<int>(dai::TensorInfo::StorageOrder::HCW):
+        case static_cast<int>(dai::TensorInfo::StorageOrder::WCH):
+        case static_cast<int>(dai::TensorInfo::StorageOrder::CWH):
+        case static_cast<int>(dai::TensorInfo::StorageOrder::NC):
+        case static_cast<int>(dai::TensorInfo::StorageOrder::CN):
+        case static_cast<int>(dai::TensorInfo::StorageOrder::C):
+        case static_cast<int>(dai::TensorInfo::StorageOrder::H):
+        case static_cast<int>(dai::TensorInfo::StorageOrder::W):
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool _dai_tensor_element_count(const dai::TensorInfo& info, size_t* count) {
+    if(!count) return false;
+    size_t result = 1;
+    if(info.dims.empty()) {
+        *count = 0;
+        return true;
+    }
+    for(const auto dim : info.dims) {
+        if(dim != 0 && result > std::numeric_limits<size_t>::max() / dim) {
+            return false;
+        }
+        result *= dim;
+    }
+    *count = result;
+    return true;
+}
+
+static bool _dai_tensor_data_type_size(dai::TensorInfo::DataType type, size_t* size) {
+    if(!size) return false;
+    switch(type) {
+        case dai::TensorInfo::DataType::U8F:
+        case dai::TensorInfo::DataType::I8:
+            *size = sizeof(uint8_t);
+            return true;
+        case dai::TensorInfo::DataType::FP16:
+            *size = sizeof(uint16_t);
+            return true;
+        case dai::TensorInfo::DataType::INT:
+            *size = sizeof(int32_t);
+            return true;
+        case dai::TensorInfo::DataType::FP32:
+            *size = sizeof(float);
+            return true;
+        case dai::TensorInfo::DataType::FP64:
+            *size = sizeof(double);
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool _dai_tensor_byte_size(const dai::TensorInfo& info, size_t* size) {
+    if(!size) return false;
+    size_t data_type_size = 0;
+    if(!_dai_tensor_data_type_size(info.dataType, &data_type_size) || info.dims.empty()
+       || info.strides.size() != info.dims.size()) {
+        return false;
+    }
+
+    bool all_one = true;
+    for(const auto dim : info.dims) {
+        if(dim != 1) all_one = false;
+    }
+    if(all_one) {
+        *size = data_type_size;
+        return true;
+    }
+
+    size_t stride_index = 0;
+    while(stride_index < info.strides.size() && info.strides[stride_index] == 0) {
+        ++stride_index;
+    }
+    if(stride_index == info.strides.size()) {
+        return false;
+    }
+    const auto dim = static_cast<size_t>(info.dims[stride_index]);
+    const auto stride = static_cast<size_t>(info.strides[stride_index]);
+    if(dim != 0 && stride > std::numeric_limits<size_t>::max() / dim) {
+        return false;
+    }
+    *size = dim * stride;
+    return true;
+}
+
+static bool _dai_tensor_data_span(const std::shared_ptr<dai::NNData>& nndata,
+                                  const dai::TensorInfo& info,
+                                  size_t tensor_size,
+                                  const uint8_t** data) {
+    if(!nndata || !nndata->data || !data) return false;
+    const auto bytes = nndata->data->getData();
+    if(info.offset > bytes.size() || tensor_size > bytes.size() - info.offset) {
+        return false;
+    }
+    *data = tensor_size == 0 ? bytes.data() : bytes.data() + info.offset;
+    return true;
+}
+
+static float _dai_fp16_to_fp32(uint16_t half) {
+    const uint32_t sign = static_cast<uint32_t>(half & 0x8000U) << 16U;
+    uint32_t exponent = (half >> 10U) & 0x1FU;
+    uint32_t mantissa = half & 0x03FFU;
+    uint32_t bits = 0;
+
+    if(exponent == 0) {
+        if(mantissa == 0) {
+            bits = sign;
+        } else {
+            uint32_t shift = 0;
+            while((mantissa & 0x0400U) == 0) {
+                mantissa <<= 1U;
+                ++shift;
+            }
+            mantissa &= 0x03FFU;
+            exponent = 127U - 14U - shift;
+            bits = sign | (exponent << 23U) | (mantissa << 13U);
+        }
+    } else if(exponent == 0x1FU) {
+        bits = sign | 0x7F800000U | (mantissa << 13U);
+    } else {
+        bits = sign | ((exponent + 112U) << 23U) | (mantissa << 13U);
+    }
+
+    float value = 0;
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+static bool _dai_tensor_value_at(const uint8_t* source,
+                                 dai::TensorInfo::DataType type,
+                                 size_t index,
+                                 double* value) {
+    if(!source || !value) return false;
+    switch(type) {
+        case dai::TensorInfo::DataType::U8F:
+            *value = source[index];
+            return true;
+        case dai::TensorInfo::DataType::I8: {
+            int8_t item = 0;
+            std::memcpy(&item, source + index * sizeof(item), sizeof(item));
+            *value = item;
+            return true;
+        }
+        case dai::TensorInfo::DataType::INT: {
+            int32_t item = 0;
+            std::memcpy(&item, source + index * sizeof(item), sizeof(item));
+            *value = item;
+            return true;
+        }
+        case dai::TensorInfo::DataType::FP16: {
+            uint16_t item = 0;
+            std::memcpy(&item, source + index * sizeof(item), sizeof(item));
+            *value = _dai_fp16_to_fp32(item);
+            return true;
+        }
+        case dai::TensorInfo::DataType::FP32: {
+            float item = 0;
+            std::memcpy(&item, source + index * sizeof(item), sizeof(item));
+            *value = item;
+            return true;
+        }
+        case dai::TensorInfo::DataType::FP64: {
+            double item = 0;
+            std::memcpy(&item, source + index * sizeof(item), sizeof(item));
+            *value = item;
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+static std::shared_ptr<dai::node::Camera> _dai_as_camera(DaiCameraNode camera, const char* context) {
+    if(!camera) {
+        last_error = std::string(context) + ": null camera";
+        return nullptr;
+    }
+    auto base_node = static_cast<dai::Node*>(camera);
+    auto raw = dynamic_cast<dai::node::Camera*>(base_node);
+    if(!raw) {
+        last_error = std::string(context) + ": node is not a Camera";
+        return nullptr;
+    }
+    auto base = raw->shared_from_this();
+    auto result = std::dynamic_pointer_cast<dai::node::Camera>(base);
+    if(!result) {
+        last_error = std::string(context) + ": invalid camera";
+        return nullptr;
+    }
+    return result;
+}
+
+static std::optional<float> _dai_optional_fps(float fps) {
+    return fps > 0.0f ? std::optional<float>(fps) : std::nullopt;
+}
+
+static std::optional<dai::ImgResizeMode> _dai_optional_resize_mode(int resize_mode) {
+    if(resize_mode < 0) return std::nullopt;
+    if(resize_mode > static_cast<int>(dai::ImgResizeMode::LETTERBOX)) {
+        throw std::invalid_argument("Invalid NeuralNetwork resize mode");
+    }
+    return static_cast<dai::ImgResizeMode>(resize_mode);
+}
+
+}  // namespace
+
+// ---------------------------------------------------------------------------
+// NeuralNetwork and NNArchive API
+// ---------------------------------------------------------------------------
+
+void dai_neural_network_set_nn_archive(DaiNode node, DaiNNArchive archive) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_nn_archive");
+    auto* ar = _dai_as_nn_archive(archive, "dai_neural_network_set_nn_archive");
+    if(!nn || !ar) return;
+    try {
+        nn->setNNArchive(**ar);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_set_nn_archive failed: ") + e.what();
+    }
+}
+
+void dai_neural_network_set_nn_archive_with_shaves(DaiNode node, DaiNNArchive archive, int num_shaves) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_nn_archive_with_shaves");
+    auto* ar = _dai_as_nn_archive(archive, "dai_neural_network_set_nn_archive_with_shaves");
+    if(!nn || !ar) return;
+    try {
+        nn->setNNArchive(**ar, num_shaves);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_set_nn_archive_with_shaves failed: ") + e.what();
+    }
+}
+
+DaiNNArchive dai_neural_network_get_nn_archive(DaiNode node) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_get_nn_archive");
+    if(!nn) return nullptr;
+    try {
+        auto archive = nn->getNNArchive();
+        if(!archive.has_value()) return nullptr;
+        return static_cast<DaiNNArchive>(new std::shared_ptr<dai::NNArchive>(
+            std::make_shared<dai::NNArchive>(archive->get())));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_get_nn_archive failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+void dai_neural_network_set_from_model_zoo_json(DaiNode node, const char* description_json, bool use_cached) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_from_model_zoo_json");
+    if(!nn) return;
+    if(!description_json) {
+        last_error = "dai_neural_network_set_from_model_zoo_json: null description_json";
+        return;
+    }
+    try {
+        auto description = nn_model_description_from_json(nlohmann::json::parse(description_json));
+        nn->setFromModelZoo(std::move(description), use_cached);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_set_from_model_zoo_json failed: ") + e.what();
+    }
+}
+
+void dai_neural_network_set_blob_path(DaiNode node, const char* path) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_blob_path");
+    if(!nn) return;
+    if(!path) {
+        last_error = "dai_neural_network_set_blob_path: null path";
+        return;
+    }
+    try {
+        nn->setBlobPath(std::filesystem::u8path(path));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_set_blob_path failed: ") + e.what();
+    }
+}
+
+void dai_neural_network_set_blob_bytes(DaiNode node, const void* data, size_t len) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_blob_bytes");
+    if(!nn) return;
+    if(!data && len > 0) {
+        last_error = "dai_neural_network_set_blob_bytes: null data";
+        return;
+    }
+    if(len < 8) {
+        last_error = "dai_neural_network_set_blob_bytes: blob data must contain at least 8 bytes";
+        return;
+    }
+    try {
+        const auto* bytes = static_cast<const uint8_t*>(data);
+        nn->setBlob(dai::OpenVINO::Blob(std::vector<uint8_t>(bytes, bytes + len)));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_set_blob_bytes failed: ") + e.what();
+    }
+}
+
+void dai_neural_network_set_other_model_path(DaiNode node, const char* path) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_other_model_path");
+    if(!nn) return;
+    if(!path) {
+        last_error = "dai_neural_network_set_other_model_path: null path";
+        return;
+    }
+    try {
+        nn->setOtherModelFormat(std::filesystem::u8path(path));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_set_other_model_path failed: ") + e.what();
+    }
+}
+
+void dai_neural_network_set_other_model_bytes(DaiNode node, const void* data, size_t len) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_other_model_bytes");
+    if(!nn) return;
+    if(!data && len > 0) {
+        last_error = "dai_neural_network_set_other_model_bytes: null data";
+        return;
+    }
+    try {
+        std::vector<uint8_t> bytes;
+        if(len > 0) {
+            const auto* begin = static_cast<const uint8_t*>(data);
+            bytes.assign(begin, begin + len);
+        }
+        nn->setOtherModelFormat(std::move(bytes));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_set_other_model_bytes failed: ") + e.what();
+    }
+}
+
+void dai_neural_network_set_model_path(DaiNode node, const char* path) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_model_path");
+    if(!nn) return;
+    if(!path) {
+        last_error = "dai_neural_network_set_model_path: null path";
+        return;
+    }
+    try {
+        nn->setModelPath(std::filesystem::u8path(path));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_set_model_path failed: ") + e.what();
+    }
+}
+
+void dai_neural_network_set_num_pool_frames(DaiNode node, int num_frames) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_num_pool_frames");
+    if(!nn) return;
+    try {
+        nn->setNumPoolFrames(num_frames);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_set_num_pool_frames failed: ") + e.what();
+    }
+}
+
+void dai_neural_network_set_num_inference_threads(DaiNode node, int num_threads) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_num_inference_threads");
+    if(!nn) return;
+    try {
+        nn->setNumInferenceThreads(num_threads);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_set_num_inference_threads failed: ") + e.what();
+    }
+}
+
+int dai_neural_network_get_num_inference_threads(DaiNode node) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_get_num_inference_threads");
+    if(!nn) return -1;
+    try {
+        return nn->getNumInferenceThreads();
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_get_num_inference_threads failed: ") + e.what();
+        return -1;
+    }
+}
+
+void dai_neural_network_set_num_nce_per_inference_thread(DaiNode node, int num_nce_per_thread) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_num_nce_per_inference_thread");
+    if(!nn) return;
+    try {
+        nn->setNumNCEPerInferenceThread(num_nce_per_thread);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_set_num_nce_per_inference_thread failed: ") + e.what();
+    }
+}
+
+void dai_neural_network_set_num_shaves_per_inference_thread(DaiNode node, int num_shaves_per_thread) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_num_shaves_per_inference_thread");
+    if(!nn) return;
+    try {
+        nn->setNumShavesPerInferenceThread(num_shaves_per_thread);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_set_num_shaves_per_inference_thread failed: ") + e.what();
+    }
+}
+
+void dai_neural_network_set_backend(DaiNode node, const char* backend) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_backend");
+    if(!nn) return;
+    if(!backend) {
+        last_error = "dai_neural_network_set_backend: null backend";
+        return;
+    }
+    try {
+        nn->setBackend(std::string(backend));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_set_backend failed: ") + e.what();
+    }
+}
+
+void dai_neural_network_set_backend_properties_json(DaiNode node, const char* properties_json) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_backend_properties_json");
+    if(!nn) return;
+    if(!properties_json) {
+        last_error = "dai_neural_network_set_backend_properties_json: null properties_json";
+        return;
+    }
+    try {
+        auto json = nlohmann::json::parse(properties_json);
+        if(!json.is_object()) {
+            throw std::invalid_argument("backend properties JSON must be an object");
+        }
+        std::map<std::string, std::string> properties;
+        for(auto it = json.begin(); it != json.end(); ++it) {
+            if(!it.value().is_string()) {
+                throw std::invalid_argument("backend property values must be strings");
+            }
+            properties.emplace(it.key(), it.value().get<std::string>());
+        }
+        nn->setBackendProperties(std::move(properties));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_set_backend_properties_json failed: ") + e.what();
+    }
+}
+
+void dai_neural_network_set_model_from_device_zoo(DaiNode node, int model) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_model_from_device_zoo");
+    if(!nn) return;
+    if(model < 0 || model > 9) {
+        last_error = "dai_neural_network_set_model_from_device_zoo: invalid model";
+        return;
+    }
+    try {
+        nn->setModelFromDeviceZoo(static_cast<dai::DeviceModelZoo>(model));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_set_model_from_device_zoo failed: ") + e.what();
+    }
+}
+
+bool dai_neural_network_build_from_output(DaiNode node, DaiOutput input, DaiNNArchive archive) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_build_from_output");
+    auto* ar = _dai_as_nn_archive(archive, "dai_neural_network_build_from_output");
+    if(!nn || !ar) return false;
+    if(!input) {
+        last_error = "dai_neural_network_build_from_output: null input";
+        return false;
+    }
+    try {
+        auto* output = static_cast<dai::Node::Output*>(input);
+        nn->setNNArchive(**ar);
+        output->link(nn->input);
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_build_from_output failed: ") + e.what();
+        return false;
+    }
+}
+
+bool dai_neural_network_build_from_camera_model_json(DaiNode node,
+                                                     DaiCameraNode camera,
+                                                     const char* model_json,
+                                                     float fps,
+                                                     int resize_mode) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_build_from_camera_model_json");
+    if(!nn) return false;
+    if(!model_json) {
+        last_error = "dai_neural_network_build_from_camera_model_json: null model_json";
+        return false;
+    }
+    try {
+        auto cam = _dai_as_camera(camera, "dai_neural_network_build_from_camera_model_json");
+        if(!cam) return false;
+        auto description = nn_model_description_from_json(nlohmann::json::parse(model_json));
+        dai::node::NeuralNetwork::Model model{std::move(description)};
+        nn->build(cam,
+                  model,
+                  _dai_optional_fps(fps),
+                  _dai_optional_resize_mode(resize_mode));
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_build_from_camera_model_json failed: ") + e.what();
+        return false;
+    }
+}
+
+bool dai_neural_network_build_from_camera_archive(DaiNode node,
+                                                  DaiCameraNode camera,
+                                                  DaiNNArchive archive,
+                                                  float fps,
+                                                  int resize_mode) {
+    auto* nn = _dai_as_neural_network(node, "dai_neural_network_build_from_camera_archive");
+    auto* ar = _dai_as_nn_archive(archive, "dai_neural_network_build_from_camera_archive");
+    if(!nn || !ar) return false;
+    try {
+        auto cam = _dai_as_camera(camera, "dai_neural_network_build_from_camera_archive");
+        if(!cam) return false;
+        dai::node::NeuralNetwork::Model model{**ar};
+        nn->build(cam,
+                  model,
+                  _dai_optional_fps(fps),
+                  _dai_optional_resize_mode(resize_mode));
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_neural_network_build_from_camera_archive failed: ") + e.what();
+        return false;
+    }
+}
+
+DaiNNArchive dai_nn_archive_new(const char* path, int compression) {
+    if(!path) {
+        last_error = "dai_nn_archive_new: null path";
+        return nullptr;
+    }
+    if(compression < static_cast<int>(dai::NNArchiveEntry::Compression::AUTO)
+       || compression > static_cast<int>(dai::NNArchiveEntry::Compression::TAR_XZ)) {
+        last_error = "dai_nn_archive_new: invalid compression";
+        return nullptr;
+    }
+    try {
+        dai::NNArchiveOptions options;
+        options.compression(static_cast<dai::NNArchiveEntry::Compression>(compression));
+        auto archive = std::make_shared<dai::NNArchive>(std::filesystem::u8path(path), options);
+        return static_cast<DaiNNArchive>(new std::shared_ptr<dai::NNArchive>(std::move(archive)));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nn_archive_new failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+DaiNNArchive dai_nn_archive_clone(DaiNNArchive archive) {
+    auto* ptr = _dai_as_nn_archive(archive, "dai_nn_archive_clone");
+    if(!ptr) return nullptr;
+    try {
+        return static_cast<DaiNNArchive>(new std::shared_ptr<dai::NNArchive>(*ptr));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nn_archive_clone failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+void dai_nn_archive_delete(DaiNNArchive archive) {
+    if(archive) {
+        delete static_cast<std::shared_ptr<dai::NNArchive>*>(archive);
+    }
+}
+
+int dai_nn_archive_get_model_type(DaiNNArchive archive) {
+    auto* ptr = _dai_as_nn_archive(archive, "dai_nn_archive_get_model_type");
+    if(!ptr) return -1;
+    try {
+        return static_cast<int>((*ptr)->getModelType());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nn_archive_get_model_type failed: ") + e.what();
+        return -1;
+    }
+}
+
+bool dai_nn_archive_get_input_size(DaiNNArchive archive, uint32_t index, uint32_t* width, uint32_t* height) {
+    auto* ptr = _dai_as_nn_archive(archive, "dai_nn_archive_get_input_size");
+    if(!ptr) return false;
+    if(!width || !height) {
+        last_error = "dai_nn_archive_get_input_size: null output";
+        return false;
+    }
+    try {
+        auto value = (*ptr)->getInputSize(index);
+        if(!value.has_value()) return false;
+        *width = value->first;
+        *height = value->second;
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nn_archive_get_input_size failed: ") + e.what();
+        return false;
+    }
+}
+
+bool dai_nn_archive_get_input_width(DaiNNArchive archive, uint32_t index, uint32_t* width) {
+    auto* ptr = _dai_as_nn_archive(archive, "dai_nn_archive_get_input_width");
+    if(!ptr) return false;
+    if(!width) {
+        last_error = "dai_nn_archive_get_input_width: null output";
+        return false;
+    }
+    try {
+        auto value = (*ptr)->getInputWidth(index);
+        if(!value.has_value()) return false;
+        *width = *value;
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nn_archive_get_input_width failed: ") + e.what();
+        return false;
+    }
+}
+
+bool dai_nn_archive_get_input_height(DaiNNArchive archive, uint32_t index, uint32_t* height) {
+    auto* ptr = _dai_as_nn_archive(archive, "dai_nn_archive_get_input_height");
+    if(!ptr) return false;
+    if(!height) {
+        last_error = "dai_nn_archive_get_input_height: null output";
+        return false;
+    }
+    try {
+        auto value = (*ptr)->getInputHeight(index);
+        if(!value.has_value()) return false;
+        *height = *value;
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nn_archive_get_input_height failed: ") + e.what();
+        return false;
+    }
+}
+
+char* dai_nn_archive_get_supported_platforms_json(DaiNNArchive archive) {
+    auto* ptr = _dai_as_nn_archive(archive, "dai_nn_archive_get_supported_platforms_json");
+    if(!ptr) return nullptr;
+    try {
+        nlohmann::json platforms = nlohmann::json::array();
+        for(const auto platform : (*ptr)->getSupportedPlatforms()) {
+            platforms.push_back(static_cast<int>(platform));
+        }
+        auto serialized = platforms.dump();
+        return dai_string_to_cstring(serialized.c_str());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nn_archive_get_supported_platforms_json failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+DaiDatatype dai_nndata_new(size_t size) {
+    try {
+        auto derived = std::make_shared<dai::NNData>(size);
+        std::shared_ptr<dai::ADatatype> base = std::move(derived);
+        return static_cast<DaiDatatype>(new std::shared_ptr<dai::ADatatype>(std::move(base)));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nndata_new failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+DaiDatatype dai_datatype_as_nndata(DaiDatatype msg) {
+    if(!msg) {
+        last_error = "dai_datatype_as_nndata: null msg";
+        return nullptr;
+    }
+    try {
+        auto ptr = static_cast<std::shared_ptr<dai::ADatatype>*>(msg);
+        if(!ptr->get() || !(*ptr)) {
+            last_error = "dai_datatype_as_nndata: invalid datatype";
+            return nullptr;
+        }
+        auto nn = std::dynamic_pointer_cast<dai::NNData>(*ptr);
+        if(!nn) return nullptr;
+        std::shared_ptr<dai::ADatatype> base = std::move(nn);
+        return static_cast<DaiDatatype>(new std::shared_ptr<dai::ADatatype>(std::move(base)));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_datatype_as_nndata failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+char* dai_nndata_get_all_layer_names_json(DaiDatatype nndata) {
+    auto nn = _dai_as_nndata(nndata, "dai_nndata_get_all_layer_names_json");
+    if(!nn) return nullptr;
+    try {
+        nlohmann::json names = nn->getAllLayerNames();
+        auto serialized = names.dump();
+        return dai_string_to_cstring(serialized.c_str());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nndata_get_all_layer_names_json failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+bool dai_nndata_has_layer(DaiDatatype nndata, const char* name) {
+    auto nn = _dai_as_nndata(nndata, "dai_nndata_has_layer");
+    if(!nn) return false;
+    if(!name) {
+        last_error = "dai_nndata_has_layer: null name";
+        return false;
+    }
+    try {
+        return nn->hasLayer(name);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nndata_has_layer failed: ") + e.what();
+        return false;
+    }
+}
+
+char* dai_nndata_get_tensor_info_json(DaiDatatype nndata, const char* name) {
+    auto nn = _dai_as_nndata(nndata, "dai_nndata_get_tensor_info_json");
+    if(!nn) return nullptr;
+    if(!name) {
+        last_error = "dai_nndata_get_tensor_info_json: null name";
+        return nullptr;
+    }
+    try {
+        auto info = nn->getTensorInfo(name);
+        auto serialized = info.has_value() ? _dai_tensor_info_to_json(*info).dump() : std::string("null");
+        return dai_string_to_cstring(serialized.c_str());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nndata_get_tensor_info_json failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+bool dai_nndata_get_tensor_element_count(DaiDatatype nndata, const char* name, size_t* count) {
+    auto nn = _dai_as_nndata(nndata, "dai_nndata_get_tensor_element_count");
+    if(!nn) return false;
+    if(!name || !count) {
+        last_error = "dai_nndata_get_tensor_element_count: null name/output";
+        return false;
+    }
+    try {
+        auto info = nn->getTensorInfo(name);
+        if(!info.has_value()) {
+            last_error = "dai_nndata_get_tensor_element_count: tensor not found";
+            return false;
+        }
+        if(!_dai_tensor_element_count(*info, count)) {
+            last_error = "dai_nndata_get_tensor_element_count: tensor element count overflow";
+            return false;
+        }
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nndata_get_tensor_element_count failed: ") + e.what();
+        return false;
+    }
+}
+
+bool dai_nndata_get_tensor_byte_size(DaiDatatype nndata, const char* name, size_t* size) {
+    auto nn = _dai_as_nndata(nndata, "dai_nndata_get_tensor_byte_size");
+    if(!nn) return false;
+    if(!name || !size) {
+        last_error = "dai_nndata_get_tensor_byte_size: null name/output";
+        return false;
+    }
+    try {
+        auto info = nn->getTensorInfo(name);
+        if(!info.has_value()) {
+            last_error = "dai_nndata_get_tensor_byte_size: tensor not found";
+            return false;
+        }
+        if(!_dai_tensor_byte_size(*info, size)) {
+            last_error = "dai_nndata_get_tensor_byte_size: invalid tensor metadata";
+            return false;
+        }
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nndata_get_tensor_byte_size failed: ") + e.what();
+        return false;
+    }
+}
+
+bool dai_nndata_copy_tensor_bytes(DaiDatatype nndata,
+                                  const char* name,
+                                  void* out,
+                                  size_t capacity,
+                                  size_t* written) {
+    auto nn = _dai_as_nndata(nndata, "dai_nndata_copy_tensor_bytes");
+    if(!nn) return false;
+    if(!name || !written) {
+        last_error = "dai_nndata_copy_tensor_bytes: null name/output";
+        return false;
+    }
+    try {
+        auto info = nn->getTensorInfo(name);
+        if(!info.has_value()) {
+            last_error = "dai_nndata_copy_tensor_bytes: tensor not found";
+            return false;
+        }
+        size_t tensor_size = 0;
+        if(!_dai_tensor_byte_size(*info, &tensor_size)) {
+            last_error = "dai_nndata_copy_tensor_bytes: invalid tensor metadata";
+            return false;
+        }
+        const uint8_t* source = nullptr;
+        if(!_dai_tensor_data_span(nn, *info, tensor_size, &source)) {
+            last_error = "dai_nndata_copy_tensor_bytes: tensor range is outside the data buffer";
+            return false;
+        }
+        if(tensor_size > capacity || (tensor_size > 0 && !out)) {
+            last_error = "dai_nndata_copy_tensor_bytes: output buffer is too small";
+            return false;
+        }
+        if(tensor_size > 0) {
+            std::memcpy(out, source, tensor_size);
+        }
+        *written = tensor_size;
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nndata_copy_tensor_bytes failed: ") + e.what();
+        return false;
+    }
+}
+
+bool dai_nndata_copy_tensor_values(DaiDatatype nndata,
+                                   const char* name,
+                                   int output_type,
+                                   bool dequantize,
+                                   void* out,
+                                   size_t capacity,
+                                   size_t* written) {
+    auto nn = _dai_as_nndata(nndata, "dai_nndata_copy_tensor_values");
+    if(!nn) return false;
+    if(!name || !written) {
+        last_error = "dai_nndata_copy_tensor_values: null name/output";
+        return false;
+    }
+#if !defined(DEPTHAI_XTENSOR_SUPPORT)
+    (void)output_type;
+    (void)dequantize;
+    (void)out;
+    (void)capacity;
+    last_error = "dai_nndata_copy_tensor_values: typed tensor access requires DEPTHAI_XTENSOR_SUPPORT";
+    return false;
+#else
+    try {
+        if(output_type < 0 || output_type > 2) {
+            last_error = "dai_nndata_copy_tensor_values: unsupported output type";
+            return false;
+        }
+        if(output_type == 2 && dequantize) {
+            last_error = "dai_nndata_copy_tensor_values: dequantized integer output is unsupported";
+            return false;
+        }
+
+        auto info = nn->getTensorInfo(name);
+        if(!info.has_value()) {
+            last_error = "dai_nndata_copy_tensor_values: tensor not found";
+            return false;
+        }
+        size_t element_count = 0;
+        size_t source_width = 0;
+        if(!_dai_tensor_element_count(*info, &element_count)
+           || !_dai_tensor_data_type_size(info->dataType, &source_width)
+           || (element_count != 0 && source_width > std::numeric_limits<size_t>::max() / element_count)) {
+            last_error = "dai_nndata_copy_tensor_values: invalid tensor metadata";
+            return false;
+        }
+        const size_t source_size = element_count * source_width;
+        const uint8_t* source = nullptr;
+        if(!_dai_tensor_data_span(nn, *info, source_size, &source)) {
+            last_error = "dai_nndata_copy_tensor_values: tensor range is outside the data buffer";
+            return false;
+        }
+        if(element_count > capacity || (element_count > 0 && !out)) {
+            last_error = "dai_nndata_copy_tensor_values: output buffer is too small";
+            return false;
+        }
+
+        for(size_t i = 0; i < element_count; ++i) {
+            double value = 0;
+            if(!_dai_tensor_value_at(source, info->dataType, i, &value)) {
+                last_error = "dai_nndata_copy_tensor_values: invalid tensor data type";
+                return false;
+            }
+            if(dequantize && info->quantization) {
+                value = (value - info->qpZp) * info->qpScale;
+            }
+            if(output_type == 0) {
+                static_cast<float*>(out)[i] = static_cast<float>(value);
+            } else if(output_type == 1) {
+                static_cast<double*>(out)[i] = value;
+            } else {
+                if(!std::isfinite(value) || value < std::numeric_limits<int32_t>::min()
+                   || value > std::numeric_limits<int32_t>::max()) {
+                    last_error = "dai_nndata_copy_tensor_values: value is outside the i32 range";
+                    return false;
+                }
+                static_cast<int32_t*>(out)[i] = static_cast<int32_t>(value);
+            }
+        }
+        *written = element_count;
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nndata_copy_tensor_values failed: ") + e.what();
+        return false;
+    }
+#endif
+}
+
+bool dai_nndata_add_tensor(DaiDatatype nndata,
+                           const char* name,
+                           int source_type,
+                           const void* data,
+                           size_t element_count,
+                           const int64_t* shape,
+                           size_t rank,
+                           int storage_order,
+                           int tensor_type) {
+    auto nn = _dai_as_nndata(nndata, "dai_nndata_add_tensor");
+    if(!nn) return false;
+    if(!name || !data) {
+        last_error = "dai_nndata_add_tensor: null name/data";
+        return false;
+    }
+    if(element_count == 0) {
+        last_error = "dai_nndata_add_tensor: element count must be greater than zero";
+        return false;
+    }
+    if(rank == 0 || rank > 4 || !shape) {
+        last_error = "dai_nndata_add_tensor: rank must be between 1 and 4";
+        return false;
+    }
+    if(!_dai_valid_storage_order(storage_order)) {
+        last_error = "dai_nndata_add_tensor: invalid storage order";
+        return false;
+    }
+    if(!_dai_valid_tensor_data_type(tensor_type)) {
+        last_error = "dai_nndata_add_tensor: invalid tensor data type";
+        return false;
+    }
+#if !defined(DEPTHAI_XTENSOR_SUPPORT)
+    (void)source_type;
+    (void)element_count;
+    last_error = "dai_nndata_add_tensor: typed tensor creation requires DEPTHAI_XTENSOR_SUPPORT";
+    return false;
+#else
+    try {
+        std::vector<size_t> dimensions;
+        dimensions.reserve(rank);
+        size_t expected_count = 1;
+        for(size_t i = 0; i < rank; ++i) {
+            if(shape[i] <= 0 || expected_count > std::numeric_limits<size_t>::max() / static_cast<size_t>(shape[i])) {
+                last_error = "dai_nndata_add_tensor: invalid or overflowing shape";
+                return false;
+            }
+            dimensions.push_back(static_cast<size_t>(shape[i]));
+            expected_count *= static_cast<size_t>(shape[i]);
+        }
+        if(expected_count != element_count) {
+            last_error = "dai_nndata_add_tensor: element count does not match shape";
+            return false;
+        }
+        const auto order = static_cast<dai::TensorInfo::StorageOrder>(storage_order);
+        const auto type = static_cast<dai::TensorInfo::DataType>(tensor_type);
+
+        switch(source_type) {
+            case 0: {
+                std::vector<uint8_t> values(static_cast<const uint8_t*>(data),
+                                            static_cast<const uint8_t*>(data) + element_count);
+                xt::xarray<uint8_t> tensor = xt::adapt(values, dimensions);
+                nn->addTensor(std::string(name), tensor, type, order);
+                break;
+            }
+            case 1: {
+                std::vector<int8_t> values(static_cast<const int8_t*>(data),
+                                           static_cast<const int8_t*>(data) + element_count);
+                xt::xarray<int8_t> tensor = xt::adapt(values, dimensions);
+                nn->addTensor(std::string(name), tensor, type, order);
+                break;
+            }
+            case 2: {
+                std::vector<int> values(element_count);
+                const auto* input = static_cast<const int32_t*>(data);
+                for(size_t i = 0; i < element_count; ++i) values[i] = static_cast<int>(input[i]);
+                xt::xarray<int> tensor = xt::adapt(values, dimensions);
+                nn->addTensor(std::string(name), tensor, type, order);
+                break;
+            }
+            case 3: {
+                std::vector<float> values(static_cast<const float*>(data),
+                                          static_cast<const float*>(data) + element_count);
+                xt::xarray<float> tensor = xt::adapt(values, dimensions);
+                nn->addTensor(std::string(name), tensor, type, order);
+                break;
+            }
+            case 4: {
+                std::vector<double> values(static_cast<const double*>(data),
+                                           static_cast<const double*>(data) + element_count);
+                xt::xarray<double> tensor = xt::adapt(values, dimensions);
+                nn->addTensor(std::string(name), tensor, type, order);
+                break;
+            }
+            case 5: {
+                std::vector<uint16_t> values(static_cast<const uint16_t*>(data),
+                                             static_cast<const uint16_t*>(data) + element_count);
+                xt::xarray<uint16_t> tensor = xt::adapt(values, dimensions);
+                nn->addTensor(std::string(name), tensor, type, order);
+                break;
+            }
+            default:
+                last_error = "dai_nndata_add_tensor: unsupported source type";
+                return false;
+        }
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nndata_add_tensor failed: ") + e.what();
+        return false;
+    }
+#endif
 }
 
 // Error handling

@@ -1084,6 +1084,10 @@ fn build_cpp_wrapper(include_paths: &[PathBuf], opencv_enabled: bool) {
     cc_build
         .cpp(true)
         .std("c++17")
+        // NNData's typed add/getTensor helpers are conditionally declared by DepthAI-Core.
+        // The native build uses the core default (DEPTHAI_XTENSOR_SUPPORT=ON), so expose the
+        // same declarations while compiling our C++ wrapper.
+        .define("DEPTHAI_XTENSOR_SUPPORT", None)
         .file(PROJECT_ROOT.join("wrapper").join("wrapper.cpp"));
 
     if !opencv_enabled {
@@ -1873,7 +1877,7 @@ fn cmake_build_depthai_core(path: PathBuf) -> Option<PathBuf> {
         get_depthai_core_root().display(),
         path.display()
     );
-    
+
     let mut parallel_builds = (num_cpus::get() as f32 * 0.80).ceil().to_string();
 
     if is_wsl() {

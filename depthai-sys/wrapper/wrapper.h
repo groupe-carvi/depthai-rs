@@ -6,8 +6,14 @@
 // - Used by the C++ wrapper implementation (`wrapper.cpp`) and
 // - Included by the binding generator (autocxx) via `autocxx_wrapper.h`.
 
+#ifdef __cplusplus
 #include <cstddef>  // size_t
 #include <cstdint>  // uint32_t
+#else
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#endif
 
 #ifdef _WIN32
 #define API __declspec(dllexport)
@@ -46,6 +52,7 @@ typedef void* DaiNode;        // currently: `dai::Node*` (derived node instance)
 typedef void* DaiCameraNode;  // currently: `dai::node::Camera*`
 typedef void* DaiOutput;      // currently: `dai::Node::Output*`
 typedef void* DaiInput;       // currently: `dai::Node::Input*`
+typedef void* DaiNNArchive;   // currently: `std::shared_ptr<dai::NNArchive>*`
 typedef void* DaiDataQueue;   // currently: `std::shared_ptr<dai::MessageQueue>*`
 typedef void* DaiDatatype;    // currently: `std::shared_ptr<dai::ADatatype>*`
 typedef void* DaiImgFrame;    // currently: `std::shared_ptr<dai::ImgFrame>*`
@@ -176,6 +183,9 @@ API DaiNode dai_pipeline_create_node_by_name(DaiPipeline pipeline, const char* n
 // Output/Input helpers
 API DaiOutput dai_node_get_output(DaiNode node, const char* group, const char* name);
 API DaiInput dai_node_get_input(DaiNode node, const char* group, const char* name);
+// Get-or-create helpers for Node::InputMap/OutputMap entries.
+API DaiInput dai_node_get_or_create_input(DaiNode node, const char* map, const char* name);
+API DaiOutput dai_node_get_or_create_output(DaiNode node, const char* map, const char* name);
 // Node introspection
 // Returned strings must be freed with dai_free_cstring.
 API int dai_node_get_id(DaiNode node);
@@ -189,6 +199,10 @@ API bool dai_node_unlink(DaiNode from, const char* out_group, const char* out_na
 
 // Host node helpers
 API DaiInput dai_hostnode_get_input(DaiNode node, const char* name);
+API void dai_input_set_reuse_previous_message(DaiInput input, bool reuse);
+API bool dai_input_get_reuse_previous_message(DaiInput input);
+API void dai_input_set_wait_for_message(DaiInput input, bool wait_for_message);
+API bool dai_input_get_wait_for_message(DaiInput input);
 API void dai_hostnode_run_sync_on_host(DaiNode node);
 API void dai_hostnode_run_sync_on_device(DaiNode node);
 API void dai_hostnode_send_processing_to_pipeline(DaiNode node, bool send);
@@ -204,6 +218,36 @@ API DaiOutput dai_threaded_hostnode_create_output(DaiNode node,
                                                   const char* name,
                                                   const char* group);
 API bool dai_threaded_node_is_running(DaiNode node);
+
+// NeuralNetwork node helpers.
+API void dai_neural_network_set_nn_archive(DaiNode node, DaiNNArchive archive);
+API void dai_neural_network_set_nn_archive_with_shaves(DaiNode node, DaiNNArchive archive, int num_shaves);
+API DaiNNArchive dai_neural_network_get_nn_archive(DaiNode node);
+API void dai_neural_network_set_from_model_zoo_json(DaiNode node, const char* description_json, bool use_cached);
+API void dai_neural_network_set_blob_path(DaiNode node, const char* path);
+API void dai_neural_network_set_blob_bytes(DaiNode node, const void* data, size_t len);
+API void dai_neural_network_set_other_model_path(DaiNode node, const char* path);
+API void dai_neural_network_set_other_model_bytes(DaiNode node, const void* data, size_t len);
+API void dai_neural_network_set_model_path(DaiNode node, const char* path);
+API void dai_neural_network_set_num_pool_frames(DaiNode node, int num_frames);
+API void dai_neural_network_set_num_inference_threads(DaiNode node, int num_threads);
+API int dai_neural_network_get_num_inference_threads(DaiNode node);
+API void dai_neural_network_set_num_nce_per_inference_thread(DaiNode node, int num_nce_per_thread);
+API void dai_neural_network_set_num_shaves_per_inference_thread(DaiNode node, int num_shaves_per_thread);
+API void dai_neural_network_set_backend(DaiNode node, const char* backend);
+API void dai_neural_network_set_backend_properties_json(DaiNode node, const char* properties_json);
+API void dai_neural_network_set_model_from_device_zoo(DaiNode node, int model);
+API bool dai_neural_network_build_from_output(DaiNode node, DaiOutput input, DaiNNArchive archive);
+API bool dai_neural_network_build_from_camera_model_json(DaiNode node,
+                                                        DaiCameraNode camera,
+                                                        const char* model_json,
+                                                        float fps,
+                                                        int resize_mode);
+API bool dai_neural_network_build_from_camera_archive(DaiNode node,
+                                                     DaiCameraNode camera,
+                                                     DaiNNArchive archive,
+                                                     float fps,
+                                                     int resize_mode);
 
 // Device helpers
 API int dai_device_get_platform(DaiDevice device);
@@ -385,6 +429,7 @@ API DaiPointCloud dai_datatype_as_pointcloud(DaiDatatype msg);
 API DaiRGBDData dai_datatype_as_rgbd(DaiDatatype msg);
 API DaiBuffer dai_datatype_as_buffer(DaiDatatype msg);
 API DaiMessageGroup dai_datatype_as_message_group(DaiDatatype msg);
+API DaiDatatype dai_datatype_as_nndata(DaiDatatype msg);
 API size_t dai_datatype_array_len(DaiDatatypeArray arr);
 API DaiDatatype dai_datatype_array_take(DaiDatatypeArray arr, size_t index);
 API void dai_datatype_array_free(DaiDatatypeArray arr);
@@ -520,6 +565,49 @@ API bool dai_download_models_from_zoo(const char* path,
                                       const char* cache_dir,
                                       const char* api_key,
                                       const char* progress_format);
+
+// NNArchive helpers. Returned JSON strings must be freed with dai_free_cstring.
+API DaiNNArchive dai_nn_archive_new(const char* path, int compression);
+API DaiNNArchive dai_nn_archive_clone(DaiNNArchive archive);
+API void dai_nn_archive_delete(DaiNNArchive archive);
+API int dai_nn_archive_get_model_type(DaiNNArchive archive);
+API bool dai_nn_archive_get_input_size(DaiNNArchive archive,
+                                       uint32_t index,
+                                       uint32_t* width,
+                                       uint32_t* height);
+API bool dai_nn_archive_get_input_width(DaiNNArchive archive, uint32_t index, uint32_t* width);
+API bool dai_nn_archive_get_input_height(DaiNNArchive archive, uint32_t index, uint32_t* height);
+API char* dai_nn_archive_get_supported_platforms_json(DaiNNArchive archive);
+
+// NNData helpers. NNData values use the generic DaiDatatype ownership representation
+// (`std::shared_ptr<dai::ADatatype>*`) and are released with dai_datatype_release.
+API DaiDatatype dai_nndata_new(size_t size);
+API char* dai_nndata_get_all_layer_names_json(DaiDatatype nndata);
+API bool dai_nndata_has_layer(DaiDatatype nndata, const char* name);
+API char* dai_nndata_get_tensor_info_json(DaiDatatype nndata, const char* name);
+API bool dai_nndata_get_tensor_element_count(DaiDatatype nndata, const char* name, size_t* count);
+API bool dai_nndata_get_tensor_byte_size(DaiDatatype nndata, const char* name, size_t* size);
+API bool dai_nndata_copy_tensor_bytes(DaiDatatype nndata,
+                                      const char* name,
+                                      void* out,
+                                      size_t capacity,
+                                      size_t* written);
+API bool dai_nndata_copy_tensor_values(DaiDatatype nndata,
+                                       const char* name,
+                                       int output_type,
+                                       bool dequantize,
+                                       void* out,
+                                       size_t capacity,
+                                       size_t* written);
+API bool dai_nndata_add_tensor(DaiDatatype nndata,
+                               const char* name,
+                               int source_type,
+                               const void* data,
+                               size_t element_count,
+                               const int64_t* shape,
+                               size_t rank,
+                               int storage_order,
+                               int tensor_type);
 
 // Error handling
 API const char* dai_get_last_error();

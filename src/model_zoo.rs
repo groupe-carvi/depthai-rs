@@ -346,9 +346,10 @@ pub fn download_models_from_zoo(dir: impl AsRef<Path>, opts: &ZooFetchOptions) -
 ///
 /// FFI: maps to depthai-core `modelzoo::setHealthEndpoint`.
 ///
-/// Note: this mutates **process-global** depthai-core state and affects every
-/// subsequent model-zoo call in this process; it may race with concurrent
-/// fetch/download operations.
+/// This setting is **process-global**. Calls through the depthai-sys wrapper
+/// are serialized with other Model Zoo operations, but concurrent callers
+/// still observe one shared configuration; configure it before starting
+/// workers or coordinate configuration explicitly.
 pub fn set_health_endpoint(endpoint: &str) -> Result<()> {
     clear_error_flag();
     let c = CString::new(endpoint)
@@ -374,9 +375,10 @@ pub fn get_health_endpoint() -> Result<String> {
 ///
 /// FFI: maps to depthai-core `modelzoo::setDownloadEndpoint`.
 ///
-/// Note: this mutates **process-global** depthai-core state and affects every
-/// subsequent model-zoo call in this process; it may race with concurrent
-/// fetch/download operations.
+/// This setting is **process-global**. Calls through the depthai-sys wrapper
+/// are serialized with other Model Zoo operations, but concurrent callers
+/// still observe one shared configuration; configure it before starting
+/// workers or coordinate configuration explicitly.
 pub fn set_download_endpoint(endpoint: &str) -> Result<()> {
     clear_error_flag();
     let c = CString::new(endpoint)
@@ -402,9 +404,10 @@ pub fn get_download_endpoint() -> Result<String> {
 ///
 /// FFI: maps to depthai-core `modelzoo::setDefaultCachePath`.
 ///
-/// Note: this mutates **process-global** depthai-core state and affects every
-/// subsequent model-zoo call in this process; it may race with concurrent
-/// fetch/download operations.
+/// This setting is **process-global**. Calls through the depthai-sys wrapper
+/// are serialized with other Model Zoo operations, but concurrent callers
+/// still observe one shared configuration; configure it before starting
+/// workers or coordinate configuration explicitly.
 ///
 /// Limitation: `path` must be valid UTF-8; non-UTF-8 paths are rejected.
 pub fn set_default_cache_path(path: impl AsRef<Path>) -> Result<()> {
@@ -437,9 +440,10 @@ pub fn get_default_cache_path() -> Result<PathBuf> {
 ///
 /// FFI: maps to depthai-core `modelzoo::setDefaultModelsPath`.
 ///
-/// Note: this mutates **process-global** depthai-core state and affects every
-/// subsequent model-zoo call in this process; it may race with concurrent
-/// fetch/download operations.
+/// This setting is **process-global**. Calls through the depthai-sys wrapper
+/// are serialized with other Model Zoo operations, but concurrent callers
+/// still observe one shared configuration; configure it before starting
+/// workers or coordinate configuration explicitly.
 ///
 /// Limitation: `path` must be valid UTF-8; non-UTF-8 paths are rejected.
 pub fn set_default_models_path(path: impl AsRef<Path>) -> Result<()> {

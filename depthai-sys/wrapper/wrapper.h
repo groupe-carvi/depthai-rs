@@ -521,7 +521,10 @@ API bool dai_download_models_from_zoo(const char* path,
                                       const char* api_key,
                                       const char* progress_format);
 
-// Error handling
+// Error handling.
+// The returned pointer belongs to the calling thread's error storage.
+// Copy it before calling dai_clear_last_error or another wrapper operation
+// on that thread. It must not be used by a different thread.
 API const char* dai_get_last_error();
 API void dai_clear_last_error();
 

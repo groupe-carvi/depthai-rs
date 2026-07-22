@@ -53,7 +53,7 @@
 #include <functional>
 
 // Global error storage
-static std::string last_error = "";
+static thread_local std::string last_error;
 
 namespace {
 template <typename T>
@@ -186,6 +186,7 @@ class RustThreadedHostNode : public dai::NodeCRTP<dai::node::ThreadedHostNode, R
 //
 // We also keep a process-wide default device which `dai_device_new()` returns (or creates).
 static std::mutex g_device_mutex;
+static std::mutex g_modelzoo_mutex;
 static std::weak_ptr<dai::Device> g_default_device;
 
 // Some XLink versions/platforms can report device state as X_LINK_ANY_STATE when queried with
@@ -4715,6 +4716,7 @@ static dai::NNModelDescription nn_model_description_from_json(const nlohmann::js
 }
 
 char* dai_nn_model_description_from_yaml_file_json(const char* model_name, const char* models_path) {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
     if(!model_name) {
         last_error = "dai_nn_model_description_from_yaml_file_json: null model_name";
         return nullptr;
@@ -4756,6 +4758,7 @@ bool dai_nn_model_description_save_to_yaml_file_json(const char* desc_json, cons
 }
 
 bool dai_modelzoo_set_health_endpoint(const char* endpoint) {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
     if(!endpoint) {
         last_error = "dai_modelzoo_set_health_endpoint: null endpoint";
         return false;
@@ -4771,6 +4774,7 @@ bool dai_modelzoo_set_health_endpoint(const char* endpoint) {
 }
 
 char* dai_modelzoo_get_health_endpoint() {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
     try {
         dai_clear_last_error();
         auto endpoint = dai::modelzoo::getHealthEndpoint();
@@ -4782,6 +4786,7 @@ char* dai_modelzoo_get_health_endpoint() {
 }
 
 bool dai_modelzoo_set_download_endpoint(const char* endpoint) {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
     if(!endpoint) {
         last_error = "dai_modelzoo_set_download_endpoint: null endpoint";
         return false;
@@ -4797,6 +4802,7 @@ bool dai_modelzoo_set_download_endpoint(const char* endpoint) {
 }
 
 char* dai_modelzoo_get_download_endpoint() {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
     try {
         dai_clear_last_error();
         auto endpoint = dai::modelzoo::getDownloadEndpoint();
@@ -4808,6 +4814,7 @@ char* dai_modelzoo_get_download_endpoint() {
 }
 
 bool dai_modelzoo_set_default_cache_path(const char* path) {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
     if(!path) {
         last_error = "dai_modelzoo_set_default_cache_path: null path";
         return false;
@@ -4823,6 +4830,7 @@ bool dai_modelzoo_set_default_cache_path(const char* path) {
 }
 
 char* dai_modelzoo_get_default_cache_path() {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
     try {
         dai_clear_last_error();
         auto path = dai::modelzoo::getDefaultCachePath().string();
@@ -4834,6 +4842,7 @@ char* dai_modelzoo_get_default_cache_path() {
 }
 
 bool dai_modelzoo_set_default_models_path(const char* path) {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
     if(!path) {
         last_error = "dai_modelzoo_set_default_models_path: null path";
         return false;
@@ -4849,6 +4858,7 @@ bool dai_modelzoo_set_default_models_path(const char* path) {
 }
 
 char* dai_modelzoo_get_default_models_path() {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
     try {
         dai_clear_last_error();
         auto path = dai::modelzoo::getDefaultModelsPath().string();
@@ -4864,6 +4874,7 @@ char* dai_get_model_from_zoo_json(const char* desc_json,
                                   const char* cache_dir,
                                   const char* api_key,
                                   const char* progress_format) {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
     if(!desc_json) {
         last_error = "dai_get_model_from_zoo_json: null desc_json";
         return nullptr;
@@ -4896,6 +4907,7 @@ bool dai_download_models_from_zoo(const char* path,
                                   const char* cache_dir,
                                   const char* api_key,
                                   const char* progress_format) {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
     if(!path) {
         last_error = "dai_download_models_from_zoo: null path";
         return false;

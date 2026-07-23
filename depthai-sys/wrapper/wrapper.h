@@ -487,7 +487,49 @@ API DaiOutput dai_camera_request_isp_output(DaiCameraNode camera, float fps);
 API void dai_camera_set_image_orientation(DaiCameraNode camera, int orientation);
 API int dai_camera_get_image_orientation(DaiCameraNode camera);
 
-// Error handling
+// ---------------------------------------------------------------------------
+// ModelZoo
+// ---------------------------------------------------------------------------
+
+// NNModelDescription yaml methods.
+// model_name: logical name or path string (not necessarily a filesystem path).
+// models_path: search base directory; pass "" to use env var / default.
+// Returned JSON uses camelCase keys. Caller must free with dai_free_cstring.
+API char* dai_nn_model_description_from_yaml_file_json(const char* model_name, const char* models_path);
+
+// Reconstructs NNModelDescription from JSON (camelCase keys) and saves to yaml.
+API bool dai_nn_model_description_save_to_yaml_file_json(const char* desc_json, const char* yaml_path);
+
+// ModelZoo global config (dai::modelzoo namespace).
+// Getters return heap strings; caller must free with dai_free_cstring.
+API bool  dai_modelzoo_set_health_endpoint(const char* endpoint);
+API char* dai_modelzoo_get_health_endpoint();
+API bool  dai_modelzoo_set_download_endpoint(const char* endpoint);
+API char* dai_modelzoo_get_download_endpoint();
+API bool  dai_modelzoo_set_default_cache_path(const char* path);
+API char* dai_modelzoo_get_default_cache_path();
+API bool  dai_modelzoo_set_default_models_path(const char* path);
+API char* dai_modelzoo_get_default_models_path();
+
+// Zoo free functions. desc_json uses camelCase keys.
+// cache_dir / api_key / progress_format: pass "" to use env / defaults.
+// NOTE: depthai-core throws if built without libcurl; surfaced via last_error.
+// Returned path string must be freed with dai_free_cstring.
+API char* dai_get_model_from_zoo_json(const char* desc_json,
+                                      bool use_cached,
+                                      const char* cache_dir,
+                                      const char* api_key,
+                                      const char* progress_format);
+// Returns true if ALL models downloaded successfully (false = partial failure).
+API bool dai_download_models_from_zoo(const char* path,
+                                      const char* cache_dir,
+                                      const char* api_key,
+                                      const char* progress_format);
+
+// Error handling.
+// The returned pointer belongs to the calling thread's error storage.
+// Copy it before calling dai_clear_last_error or another wrapper operation
+// on that thread. It must not be used by a different thread.
 API const char* dai_get_last_error();
 API void dai_clear_last_error();
 

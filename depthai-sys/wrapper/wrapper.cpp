@@ -53,7 +53,7 @@
 #include <functional>
 
 // Global error storage
-static std::string last_error = "";
+static thread_local std::string last_error;
 
 namespace {
 template <typename T>
@@ -188,6 +188,7 @@ class RustThreadedHostNode : public dai::NodeCRTP<dai::node::ThreadedHostNode, R
 // and a per-device-ID map for devices opened by `dai_device_new_with_device_id()`.
 // Both are protected by the same mutex so callers targeting the same board share one connection.
 static std::mutex g_device_mutex;
+static std::mutex g_modelzoo_mutex;
 static std::weak_ptr<dai::Device> g_default_device;
 static std::unordered_map<std::string, std::weak_ptr<dai::Device>> g_named_devices;
 
@@ -4774,6 +4775,253 @@ const char* dai_camera_socket_name(int socket) {
     } catch (const std::exception& e) {
         last_error = std::string("dai_camera_socket_name failed: ") + e.what();
         return "UNKNOWN";
+    }
+}
+
+static nlohmann::json nn_model_description_to_json(const dai::NNModelDescription& d) {
+    return nlohmann::json{
+        {"model", d.model},
+        {"platform", d.platform},
+        {"optimizationLevel", d.optimizationLevel},
+        {"compressionLevel", d.compressionLevel},
+        {"snpeVersion", d.snpeVersion},
+        {"modelPrecisionType", d.modelPrecisionType},
+        {"globalMetadataEntryName", d.globalMetadataEntryName}
+    };
+}
+
+static dai::NNModelDescription nn_model_description_from_json(const nlohmann::json& j) {
+    dai::NNModelDescription d;
+    d.model = j.value("model", std::string{});
+    d.platform = j.value("platform", std::string{});
+    d.optimizationLevel = j.value("optimizationLevel", std::string{});
+    d.compressionLevel = j.value("compressionLevel", std::string{});
+    d.snpeVersion = j.value("snpeVersion", std::string{});
+    d.modelPrecisionType = j.value("modelPrecisionType", std::string{});
+    d.globalMetadataEntryName = j.value("globalMetadataEntryName", std::string{});
+    return d;
+}
+
+char* dai_nn_model_description_from_yaml_file_json(const char* model_name, const char* models_path) {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
+    if(!model_name) {
+        last_error = "dai_nn_model_description_from_yaml_file_json: null model_name";
+        return nullptr;
+    }
+    if(!models_path) {
+        last_error = "dai_nn_model_description_from_yaml_file_json: null models_path";
+        return nullptr;
+    }
+    try {
+        dai_clear_last_error();
+        auto desc = dai::NNModelDescription::fromYamlFile(model_name, models_path);
+        auto j = nn_model_description_to_json(desc);
+        return dai_string_to_cstring(j.dump().c_str());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nn_model_description_from_yaml_file_json failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+bool dai_nn_model_description_save_to_yaml_file_json(const char* desc_json, const char* yaml_path) {
+    if(!desc_json) {
+        last_error = "dai_nn_model_description_save_to_yaml_file_json: null desc_json";
+        return false;
+    }
+    if(!yaml_path) {
+        last_error = "dai_nn_model_description_save_to_yaml_file_json: null yaml_path";
+        return false;
+    }
+    try {
+        dai_clear_last_error();
+        auto j = nlohmann::json::parse(desc_json);
+        auto desc = nn_model_description_from_json(j);
+        desc.saveToYamlFile(yaml_path);
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nn_model_description_save_to_yaml_file_json failed: ") + e.what();
+        return false;
+    }
+}
+
+bool dai_modelzoo_set_health_endpoint(const char* endpoint) {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
+    if(!endpoint) {
+        last_error = "dai_modelzoo_set_health_endpoint: null endpoint";
+        return false;
+    }
+    try {
+        dai_clear_last_error();
+        dai::modelzoo::setHealthEndpoint(endpoint);
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_modelzoo_set_health_endpoint failed: ") + e.what();
+        return false;
+    }
+}
+
+char* dai_modelzoo_get_health_endpoint() {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
+    try {
+        dai_clear_last_error();
+        auto endpoint = dai::modelzoo::getHealthEndpoint();
+        return dai_string_to_cstring(endpoint.c_str());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_modelzoo_get_health_endpoint failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+bool dai_modelzoo_set_download_endpoint(const char* endpoint) {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
+    if(!endpoint) {
+        last_error = "dai_modelzoo_set_download_endpoint: null endpoint";
+        return false;
+    }
+    try {
+        dai_clear_last_error();
+        dai::modelzoo::setDownloadEndpoint(endpoint);
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_modelzoo_set_download_endpoint failed: ") + e.what();
+        return false;
+    }
+}
+
+char* dai_modelzoo_get_download_endpoint() {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
+    try {
+        dai_clear_last_error();
+        auto endpoint = dai::modelzoo::getDownloadEndpoint();
+        return dai_string_to_cstring(endpoint.c_str());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_modelzoo_get_download_endpoint failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+bool dai_modelzoo_set_default_cache_path(const char* path) {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
+    if(!path) {
+        last_error = "dai_modelzoo_set_default_cache_path: null path";
+        return false;
+    }
+    try {
+        dai_clear_last_error();
+        dai::modelzoo::setDefaultCachePath(path);
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_modelzoo_set_default_cache_path failed: ") + e.what();
+        return false;
+    }
+}
+
+char* dai_modelzoo_get_default_cache_path() {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
+    try {
+        dai_clear_last_error();
+        auto path = dai::modelzoo::getDefaultCachePath().string();
+        return dai_string_to_cstring(path.c_str());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_modelzoo_get_default_cache_path failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+bool dai_modelzoo_set_default_models_path(const char* path) {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
+    if(!path) {
+        last_error = "dai_modelzoo_set_default_models_path: null path";
+        return false;
+    }
+    try {
+        dai_clear_last_error();
+        dai::modelzoo::setDefaultModelsPath(path);
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_modelzoo_set_default_models_path failed: ") + e.what();
+        return false;
+    }
+}
+
+char* dai_modelzoo_get_default_models_path() {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
+    try {
+        dai_clear_last_error();
+        auto path = dai::modelzoo::getDefaultModelsPath().string();
+        return dai_string_to_cstring(path.c_str());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_modelzoo_get_default_models_path failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+char* dai_get_model_from_zoo_json(const char* desc_json,
+                                  bool use_cached,
+                                  const char* cache_dir,
+                                  const char* api_key,
+                                  const char* progress_format) {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
+    if(!desc_json) {
+        last_error = "dai_get_model_from_zoo_json: null desc_json";
+        return nullptr;
+    }
+    if(!cache_dir) {
+        last_error = "dai_get_model_from_zoo_json: null cache_dir";
+        return nullptr;
+    }
+    if(!api_key) {
+        last_error = "dai_get_model_from_zoo_json: null api_key";
+        return nullptr;
+    }
+    if(!progress_format) {
+        last_error = "dai_get_model_from_zoo_json: null progress_format";
+        return nullptr;
+    }
+    try {
+        dai_clear_last_error();
+        auto j = nlohmann::json::parse(desc_json);
+        auto desc = nn_model_description_from_json(j);
+        auto path = dai::getModelFromZoo(desc, use_cached, cache_dir, api_key, progress_format);
+        return dai_string_to_cstring(path.string().c_str());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_get_model_from_zoo_json failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+bool dai_download_models_from_zoo(const char* path,
+                                  const char* cache_dir,
+                                  const char* api_key,
+                                  const char* progress_format) {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
+    if(!path) {
+        last_error = "dai_download_models_from_zoo: null path";
+        return false;
+    }
+    if(!cache_dir) {
+        last_error = "dai_download_models_from_zoo: null cache_dir";
+        return false;
+    }
+    if(!api_key) {
+        last_error = "dai_download_models_from_zoo: null api_key";
+        return false;
+    }
+    if(!progress_format) {
+        last_error = "dai_download_models_from_zoo: null progress_format";
+        return false;
+    }
+    try {
+        dai_clear_last_error();
+        auto result = dai::downloadModelsFromZoo(path, cache_dir, api_key, progress_format);
+        if(!result) {
+            last_error = "dai_download_models_from_zoo: one or more model downloads failed";
+            return false;
+        }
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_download_models_from_zoo failed: ") + e.what();
+        return false;
     }
 }
 

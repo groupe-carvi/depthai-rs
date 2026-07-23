@@ -356,7 +356,7 @@
 //! # let pipeline = Pipeline::new().build()?;
 //! # let camera_out = pipeline.create_node("dai::node::Camera")?.output("raw")?;
 //! let manip = pipeline.create::<ImageManipNode>()?;
-//! 
+//!
 //! // Configure manipulation via initial config
 //! let mut config = manip.initial_config()?;
 //! config.add_crop_xywh(100, 100, 640, 480)
@@ -491,29 +491,32 @@ pub use depthai_sys as bindings;
 // Re-export proc-macros for ergonomic use: `use depthai::native_node_wrapper;`.
 extern crate self as depthai;
 
-pub use depthai_macros::native_node_wrapper;
 pub use depthai_macros::depthai_composite;
 pub use depthai_macros::depthai_host_node;
 pub use depthai_macros::depthai_threaded_host_node;
+pub use depthai_macros::native_node_wrapper;
 
 pub mod camera;
 pub mod common;
 pub mod device;
+pub mod encoded_frame;
 pub mod error;
 pub mod gate;
 pub mod host_node;
-pub mod encoded_frame;
 pub mod image_align;
 pub mod image_manip;
-pub mod threaded_host_node;
-#[cfg(feature = "rerun")]
-pub mod rerun_host_node;
+pub mod model_zoo;
+pub mod neural_network;
+pub mod nn_archive;
 pub mod output;
 pub mod pipeline;
 pub mod pointcloud;
 pub mod queue;
+#[cfg(feature = "rerun")]
+pub mod rerun_host_node;
 pub mod rgbd;
 pub mod stereo_depth;
+pub mod threaded_host_node;
 pub mod video_encoder;
 
 pub use error::{DepthaiError, Result};
@@ -522,25 +525,27 @@ pub use pipeline::{CreateInPipeline, CreateInPipelineWith, DeviceNode, DeviceNod
 pub use device::{Device, DevicePlatform, connected_device_ids};
 pub use pipeline::Pipeline;
 
-pub use output::{Output, Input};
-pub use pointcloud::{Point3fRGBA, PointCloudData};
-pub use queue::{Datatype, DatatypeEnum, InputQueue, MessageQueue, QueueCallbackHandle};
+pub use common::CameraImageOrientation;
+pub use encoded_frame::{EncodedFrame, EncodedFrameProfile, EncodedFrameQueue, EncodedFrameType};
+pub use gate::{GateControl, GateNode};
+pub use host_node::{Buffer, HostNode, HostNodeImpl, MessageGroup};
+pub use image_align::ImageAlignNode;
 pub use image_manip::{
-    Backend as ImageManipBackend,
-    Colormap,
-    ImageManipConfig,
-    ImageManipNode,
-    ImageManipResizeMode,
+    Backend as ImageManipBackend, Colormap, ImageManipConfig, ImageManipNode, ImageManipResizeMode,
     PerformanceMode as ImageManipPerformanceMode,
 };
-pub use image_align::ImageAlignNode;
-pub use encoded_frame::{EncodedFrame, EncodedFrameProfile, EncodedFrameQueue, EncodedFrameType};
+pub use model_zoo::{
+    NNModelDescription, ProgressFormat, SlugComponents, ZooFetchOptions, download_models_from_zoo,
+    get_model_from_zoo,
+};
+pub use output::{Input, Output};
+pub use pointcloud::{Point3fRGBA, PointCloudData};
+pub use queue::{Datatype, DatatypeEnum, InputQueue, MessageQueue, QueueCallbackHandle};
+#[cfg(feature = "rerun")]
+pub use rerun_host_node::{
+    RerunHostNode, RerunHostNodeConfig, RerunViewer, RerunWebConfig, create_rerun_host_node,
+};
 pub use rgbd::{DepthUnit, RgbdData, RgbdNode};
 pub use stereo_depth::{PresetMode as StereoPresetMode, StereoDepthNode};
+pub use threaded_host_node::{ThreadedHostNode, ThreadedHostNodeContext, ThreadedHostNodeImpl};
 pub use video_encoder::{VideoEncoderNode, VideoEncoderProfile, VideoEncoderRateControlMode};
-pub use host_node::{HostNode, HostNodeImpl, MessageGroup, Buffer};
-pub use threaded_host_node::{ThreadedHostNode, ThreadedHostNodeImpl, ThreadedHostNodeContext};
-#[cfg(feature = "rerun")]
-pub use rerun_host_node::{RerunHostNode, RerunHostNodeConfig, RerunViewer, RerunWebConfig, create_rerun_host_node};
-pub use gate::{GateControl, GateNode};
-pub use common::CameraImageOrientation;

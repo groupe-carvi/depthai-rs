@@ -134,8 +134,8 @@ This table reflects what the Rust crates in this repo currently wrap and demonst
 | DepthAI Feature             | State     | Rust evidence                                             |
 | --------------------------- | :-------: | --------------------------------------------------------- |
 | `AprilTags`                 |    🔴     |                                                           |
-| `Benchmark`                 |    🔴     |                     
-| 
+| `Benchmark`                 |    🔴     |                                                           |
+|                             |           |                                                           |
 | `Multi-Device Pipeline`     |    🟡     |                                                           |
 | `Camera`                    |    🟢     | `examples/camera.rs`                                      |
 | `DetectionNetwork`          |    🔴     |                                                           |

@@ -148,7 +148,7 @@ This table reflects what the Rust crates in this repo currently wrap and demonst
 | `ImageManip`                |    🟢     | `examples/image_manip.rs`, `src/image_manip.rs`           |
 | `Misc/AutoReconnect`        |    🔴     |                                                           |
 | `Misc/Projectors`           |    🟡     | `Device::set_ir_laser_dot_projector_intensity`            |
-| `ModelZoo`                  |    🔴     |                                                           |
+| `ModelZoo`                  |    🟢     |                                                           |
 | `NeuralDepth`               |    🔴     |                                                           |
 | `NeuralNetwork`             |    🔴     |                                                           |
 | `ObjectTracker`             |    🔴     |                                                           |

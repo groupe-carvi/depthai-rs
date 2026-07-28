@@ -2,12 +2,18 @@ use std::{env, path::Path};
 
 // Keep this in sync with `depthai-sys/build.rs`.
 // This crate's Cargo version is not necessarily the same as the DepthAI-Core tag.
-const LATEST_SUPPORTED_DEPTHAI_CORE_TAG: &str = "v3.6.1";
+const LATEST_SUPPORTED_DEPTHAI_CORE_TAG: &str = "v3.8.0";
 
 fn selected_depthai_core_tag() -> String {
     // This mirrors `depthai-sys/build.rs`'s version-selection logic.
     // Feature naming note: Cargo features can't contain '.', so users select `v3-2-1`
     // to mean DepthAI-Core tag `v3.2.1`.
+    if env::var_os("CARGO_FEATURE_V3_8_0").is_some() {
+        return "v3.8.0".to_string();
+    }
+    if env::var_os("CARGO_FEATURE_V3_7_1").is_some() {
+        return "v3.7.1".to_string();
+    }
     if env::var_os("CARGO_FEATURE_V3_6_1").is_some() {
         return "v3.6.1".to_string();
     }

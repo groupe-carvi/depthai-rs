@@ -62,7 +62,7 @@ static DEPTHAI_CORE_ROOT: Lazy<RwLock<PathBuf>> = Lazy::new(|| {
 const DEPTHAI_CORE_REPOSITORY: &str = "https://github.com/luxonis/depthai-core.git";
 
 // Latest DepthAI-Core version supported by this crate.
-const LATEST_SUPPORTED_DEPTHAI_CORE_TAG: DepthaiCoreVersion = DepthaiCoreVersion::V3_6_1;
+const LATEST_SUPPORTED_DEPTHAI_CORE_TAG: DepthaiCoreVersion = DepthaiCoreVersion::V3_8_0;
 
 /// Windows-only OpenCV prebuilt runtime selection.
 ///
@@ -99,6 +99,8 @@ macro_rules! println_build {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DepthaiCoreVersion {
     Latest,
+    V3_8_0,
+    V3_7_1,
     V3_6_1,
     V3_5_0,
     V3_4_0,
@@ -112,6 +114,8 @@ impl DepthaiCoreVersion {
     fn tag(self) -> &'static str {
         match self {
             DepthaiCoreVersion::Latest => LATEST_SUPPORTED_DEPTHAI_CORE_TAG.tag(),
+            DepthaiCoreVersion::V3_8_0 => "v3.8.0",
+            DepthaiCoreVersion::V3_7_1 => "v3.7.1",
             DepthaiCoreVersion::V3_6_1 => "v3.6.1",
             DepthaiCoreVersion::V3_5_0 => "v3.5.0",
             DepthaiCoreVersion::V3_4_0 => "v3.4.0",
@@ -133,8 +137,10 @@ impl DepthaiCoreVersion {
             DepthaiCoreVersion::Latest => {
                 LATEST_SUPPORTED_DEPTHAI_CORE_TAG.windows_opencv_runtime()
             }
-            // depthai-core v3.6.1 was compiled against OpenCV 4.13.0.
-            DepthaiCoreVersion::V3_6_1 => WindowsOpenCvRuntime {
+            // depthai-core v3.6.1 through v3.8.0 were compiled against OpenCV 4.13.0.
+            DepthaiCoreVersion::V3_8_0
+            | DepthaiCoreVersion::V3_7_1
+            | DepthaiCoreVersion::V3_6_1 => WindowsOpenCvRuntime {
                 opencv_version: "4.13.0",
                 world_dll: "opencv_world4130.dll",
             },
@@ -164,6 +170,8 @@ fn selected_depthai_core_version() -> DepthaiCoreVersion {
 
     let candidates: &[(&str, DepthaiCoreVersion)] = &[
         ("CARGO_FEATURE_LATEST", DepthaiCoreVersion::Latest),
+        ("CARGO_FEATURE_V3_8_0", DepthaiCoreVersion::V3_8_0),
+        ("CARGO_FEATURE_V3_7_1", DepthaiCoreVersion::V3_7_1),
         ("CARGO_FEATURE_V3_6_1", DepthaiCoreVersion::V3_6_1),
         ("CARGO_FEATURE_V3_5_0", DepthaiCoreVersion::V3_5_0),
         ("CARGO_FEATURE_V3_4_0", DepthaiCoreVersion::V3_4_0),
@@ -184,7 +192,7 @@ fn selected_depthai_core_version() -> DepthaiCoreVersion {
 
     if picked.len() > 1 {
         panic!(
-            "Multiple DepthAI-Core version features are enabled ({:?}). Please enable at most one of: latest, v3-6-1, v3-5-0, v3-4-0, v3-3-0, v3-2-1, v3-2-0, v3-1-0.",
+            "Multiple DepthAI-Core version features are enabled ({:?}). Please enable at most one of: latest, v3-8-0, v3-7-1, v3-6-1, v3-5-0, v3-4-0, v3-3-0, v3-2-1, v3-2-0, v3-1-0.",
             enabled
         );
     }
@@ -1240,7 +1248,7 @@ fn strip_sfx_header(exe_path: &Path, out_7z_path: &Path) {
 /// the `opencv_world*.dll` pattern are deleted.
 ///
 /// This prevents stale artifacts from a previous DepthAI-Core build (e.g. `opencv_world4110.dll`
-/// after upgrading to a `v3.6.1` build that requires `opencv_world4130.dll`) from being staged
+/// after upgrading to a `v3.6.1+` build that requires `opencv_world4130.dll`) from being staged
 /// into the target directory and confusing the Windows DLL loader at runtime.
 #[cfg(all(feature = "native", feature = "opencv-download"))]
 fn remove_stale_opencv_world_dlls(bin_dir: &Path, selected_world_dll: &str) {
@@ -2079,15 +2087,39 @@ fn get_depthai_windows_prebuilt_binary() -> Result<PathBuf, String> {
         zip::zip_extract::zip_extract(&zip_path, &BUILD_FOLDER_PATH)
             .expect("Failed to extract prebuilt depthai-core");
 
-        let inner_folder = BUILD_FOLDER_PATH.join(
-            zip_path
-                .file_stem()
-                .expect("zip has no stem")
-                .to_str()
-                .unwrap(),
-        );
+        // The downloaded asset is renamed to `depthai-core.zip` for caching, but newer
+        // releases retain a versioned top-level directory inside the archive (for example,
+        // `depthai-core-v3.8.0-win64`). Locate the extracted distribution by its required
+        // files instead of assuming its directory name matches the local zip stem.
+        let inner_folder = fs::read_dir(&*BUILD_FOLDER_PATH)
+            .expect("Failed to inspect extracted depthai-core archive")
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .find(|path| {
+                path.is_dir()
+                    && path
+                        .join("include")
+                        .join("depthai")
+                        .join("depthai.hpp")
+                        .exists()
+                    && path.join("lib").join("depthai-core.lib").exists()
+                    && path.join("bin").join("depthai-core.dll").exists()
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "Failed to locate a complete depthai-core distribution after extracting {}",
+                    zip_path.display()
+                )
+            });
 
-        fs::rename(&inner_folder, &extracted_path).expect("Failed to rename extracted folder");
+        fs::rename(&inner_folder, &extracted_path).unwrap_or_else(|e| {
+            panic!(
+                "Failed to rename extracted folder {} to {}: {}",
+                inner_folder.display(),
+                extracted_path.display(),
+                e
+            )
+        });
 
         fs::remove_file(&zip_path).expect("Failed to remove zip archive");
     }

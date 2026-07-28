@@ -20,6 +20,17 @@ pub enum DevicePlatform {
     Rvc4 = 2,
 }
 
+impl DevicePlatform {
+    pub fn from_raw(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Rvc2),
+            1 => Some(Self::Rvc3),
+            2 => Some(Self::Rvc4),
+            _ => None,
+        }
+    }
+}
+
 impl Device {
     pub(crate) fn from_handle(handle: DaiDevice) -> Self {
         Self { handle }
@@ -155,6 +166,30 @@ impl Drop for Device {
 
 unsafe impl Send for Device {}
 unsafe impl Sync for Device {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn device_platform_converts_known_raw_values() {
+        let cases = [
+            (0, DevicePlatform::Rvc2),
+            (1, DevicePlatform::Rvc3),
+            (2, DevicePlatform::Rvc4),
+        ];
+
+        for (raw, expected) in cases {
+            assert_eq!(DevicePlatform::from_raw(raw), Some(expected));
+        }
+    }
+
+    #[test]
+    fn device_platform_rejects_unknown_raw_values() {
+        assert_eq!(DevicePlatform::from_raw(-1), None);
+        assert_eq!(DevicePlatform::from_raw(3), None);
+    }
+}
 
 /// Returns the device IDs of all currently-connected OAK boards.
 ///

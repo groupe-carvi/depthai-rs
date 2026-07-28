@@ -7,7 +7,7 @@ depthai-rs is an unofficial binding in rust for the Luxonis's DepthAI-Core C++ l
 
 > [!WARNING]
 > DepthAI-Core itself does not provide strong API stability guarantees yet.
-> This repo targets **DepthAI-Core v3.1.0+** (supported tags: **v3.1.0 / v3.2.0 / v3.2.1**; default: **`latest` = v3.2.1**).
+> This repo targets **DepthAI-Core v3.1.0+** (supported tags: **v3.1.0 to v3.6.1**; default: **`latest` = v3.6.1**).
 
 ## What’s in this repo
 
@@ -135,6 +135,8 @@ This table reflects what the Rust crates in this repo currently wrap and demonst
 | --------------------------- | :-------: | --------------------------------------------------------- |
 | `AprilTags`                 |    🔴     |                                                           |
 | `Benchmark`                 |    🔴     |                                                           |
+|                             |           |                                                           |
+| `Multi-Device Pipeline`     |    🟡     |                                                           |
 | `Camera`                    |    🟢     | `examples/camera.rs`                                      |
 | `DetectionNetwork`          |    🔴     |                                                           |
 | `DynamicCalibration`        |    🔴     |                                                           |
@@ -146,7 +148,7 @@ This table reflects what the Rust crates in this repo currently wrap and demonst
 | `ImageManip`                |    🟢     | `examples/image_manip.rs`, `src/image_manip.rs`           |
 | `Misc/AutoReconnect`        |    🔴     |                                                           |
 | `Misc/Projectors`           |    🟡     | `Device::set_ir_laser_dot_projector_intensity`            |
-| `ModelZoo`                  |    🔴     |                                                           |
+| `ModelZoo`                  |    🟢     |                                                           |
 | `NeuralDepth`               |    🔴     |                                                           |
 | `NeuralNetwork`             |    🔴     |                                                           |
 | `ObjectTracker`             |    🔴     |                                                           |

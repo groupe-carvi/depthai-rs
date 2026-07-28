@@ -90,10 +90,15 @@ typedef struct DaiPoint3fRGBA {
 
 // Low-level device operations
 API DaiDevice dai_device_new();
+API DaiDevice dai_device_new_with_device_id(const char* device_id);
 API DaiDevice dai_device_clone(DaiDevice device);
 API void dai_device_delete(DaiDevice device);
 API bool dai_device_is_closed(DaiDevice device);
 API void dai_device_close(DaiDevice device);
+// Returns a newline-delimited list of device IDs for all connected boards
+// Returns an empty string (not null) when none are connected
+// Caller must free with dai_free_cstring()
+API char* dai_get_connected_device_ids();
 
 // Low-level pipeline operations  
 API DaiPipeline dai_pipeline_new();
@@ -609,7 +614,10 @@ API bool dai_nndata_add_tensor(DaiDatatype nndata,
                                int storage_order,
                                int tensor_type);
 
-// Error handling
+// Error handling.
+// The returned pointer belongs to the calling thread's error storage.
+// Copy it before calling dai_clear_last_error or another wrapper operation
+// on that thread. It must not be used by a different thread.
 API const char* dai_get_last_error();
 API void dai_clear_last_error();
 

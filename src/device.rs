@@ -1,5 +1,6 @@
 use autocxx::c_int;
-use depthai_sys::{depthai, DaiDevice};
+use depthai_sys::{DaiDevice, depthai};
+use std::ffi::{CStr, CString};
 use std::os::raw::c_int as RawInt;
 
 use crate::common::CameraBoardSocket;
@@ -29,6 +30,25 @@ impl Device {
         let handle = depthai::dai_device_new();
         if handle.is_null() {
             Err(last_error("failed to create DepthAI device"))
+        } else {
+            Ok(Self { handle })
+        }
+    }
+
+    /// Open the device with the given device ID (serial printed on the board)
+    ///
+    /// Use this when multiple OAK boards are attached and you need to target a specific one.
+    /// The device ID is also visible in `lsusb` as the USB serial attribute
+    ///
+    /// # Errors
+    /// Returns an error if no device with the given ID is found or if it cannot be opened.
+    pub fn new_with_device_id(device_id: &str) -> Result<Self> {
+        clear_error_flag();
+        let c_device_id =
+            CString::new(device_id).map_err(|_| last_error("device_id contains a null byte"))?;
+        let handle = unsafe { depthai::dai_device_new_with_device_id(c_device_id.as_ptr()) };
+        if handle.is_null() {
+            Err(last_error("failed to open DepthAI device by device ID"))
         } else {
             Ok(Self { handle })
         }
@@ -135,3 +155,24 @@ impl Drop for Device {
 
 unsafe impl Send for Device {}
 unsafe impl Sync for Device {}
+
+/// Returns the device IDs of all currently-connected OAK boards.
+///
+/// IDs appear in the same order that [`Device::new`] would pick them, so `ids[0]` is
+/// the board that a default open would target.
+///
+/// # Errors
+/// Returns an error if the XLink enumeration itself fails.
+pub fn connected_device_ids() -> crate::error::Result<Vec<String>> {
+    clear_error_flag();
+    let raw = depthai::dai_get_connected_device_ids();
+    if raw.is_null() {
+        return Err(last_error("failed to query connected device IDs"));
+    }
+    let s = unsafe { CStr::from_ptr(raw) }.to_string_lossy().into_owned();
+    unsafe { depthai::dai_free_cstring(raw) };
+    if s.is_empty() {
+        return Ok(Vec::new());
+    }
+    Ok(s.split('\n').map(String::from).collect())
+}

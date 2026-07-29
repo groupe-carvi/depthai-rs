@@ -14,7 +14,7 @@ depthai-rs is an unofficial binding in rust for the Luxonis's DepthAI-Core C++ l
 ### Crates
 
 - `depthai-sys`
-- Builds DepthAI-Core and its dependencies (cached under `target/dai-build/<tag>/...`).
+- Builds DepthAI-Core and its dependencies (cached across projects under `~/.depthai-rs/`).
 - Compiles a small C++ wrapper (`depthai-sys/wrapper/wrapper.cpp`) and generates Rust bindings using `autocxx`.
 - `depthai`
 - Safe(-er) Rust wrapper types like `Device`, `Pipeline`, typed camera helpers, and a generic node API.
@@ -91,7 +91,25 @@ cargo build
 Notes:
 
 - The first build can take a while because DepthAI-Core is fetched/built and dependencies are prepared.
-- Build artifacts for native code are cached under `target/dai-build/<tag>/...`.
+- Native DepthAI-Core and OpenCV artifacts are cached under `~/.depthai-rs/`, so `cargo clean`
+  and builds from other repositories on the same host can reuse them.
+
+The cache separates dependency versions, Rust target triples, and incompatible
+DepthAI-Core build configurations:
+
+```text
+~/.depthai-rs/
+├── depthai-core/<tag>/<target>/<build-variant>/
+└── opencv/<version>/<target>/
+```
+
+Set `DEPTHAI_RS_CACHE_DIR` to an absolute path to relocate the cache. For example,
+in PowerShell:
+
+```powershell
+$env:DEPTHAI_RS_CACHE_DIR = "D:\caches\depthai-rs"
+cargo build
+```
 
 ### Building documentation (docs.rs)
 
@@ -175,6 +193,7 @@ This table reflects what the Rust crates in this repo currently wrap and demonst
 
 `depthai-sys` exposes a few environment variables that affect native builds:
 
+- `DEPTHAI_RS_CACHE_DIR`: override the native dependency cache directory. The value must be an absolute path (default: `~/.depthai-rs`).
 - `DEPTHAI_CORE_ROOT`: override the DepthAI-Core checkout directory.
 - `DEPTHAI_SYS_LINK_SHARED=1`: prefer linking against `libdepthai-core.so` (otherwise static is preferred).
 - `DEPTHAI_STAGE_RUNTIME_DEPS=0`: disable automatic staging of runtime DLL/.so dependencies into `target/<profile>/{,deps,examples}`.

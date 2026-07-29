@@ -4,6 +4,11 @@ Low-level FFI crate for **depthai-rs**.
 
 This crate is responsible for building/downloading **Luxonis DepthAI-Core v3** and generating Rust bindings (via `autocxx`) plus a small C++ wrapper layer.
 
+Native DepthAI-Core and OpenCV artifacts are cached by dependency version and
+target triple under `~/.depthai-rs/`. This cache survives `cargo clean` and is
+shared by builds from different repositories for the same user. Set
+`DEPTHAI_RS_CACHE_DIR` to an absolute path to use a different cache location.
+
 Most users should depend on the high-level crate instead:
 
 - High-level crate: `depthai`

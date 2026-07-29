@@ -1,6 +1,10 @@
 // Use autocxx to generate C++ bindings
 use autocxx::prelude::*;
 
+#[cfg(test)]
+#[allow(dead_code)]
+mod cache_layout;
+
 include_cpp! {
     #include "autocxx_wrapper.h"
 

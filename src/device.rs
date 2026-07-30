@@ -1,10 +1,11 @@
 use autocxx::c_int;
 use depthai_sys::{DaiDevice, depthai};
+use serde::Deserialize;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_int as RawInt;
 
-use crate::common::CameraBoardSocket;
-use crate::error::{Result, clear_error_flag, last_error, take_error_if_any};
+use crate::common::{CameraBoardSocket, CameraImageOrientation, CameraSensorType};
+use crate::error::{DepthaiError, Result, clear_error_flag, last_error, take_error_if_any};
 
 const MAX_SOCKETS: usize = 16;
 
@@ -18,6 +19,155 @@ pub enum DevicePlatform {
     Rvc2 = 0,
     Rvc3 = 1,
     Rvc4 = 2,
+}
+
+/// Active sensor area reported for a camera mode.
+///
+/// This mirrors the fields of `dai::Rect`, including whether DepthAI explicitly
+/// marked the coordinates as normalized.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CameraFov {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub normalized: bool,
+    pub has_normalized: bool,
+}
+
+/// One sensor mode reported by `dai::CameraSensorConfig`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CameraSensorConfig {
+    pub width: i32,
+    pub height: i32,
+    pub min_fps: f32,
+    pub max_fps: f32,
+    pub fov: CameraFov,
+    pub sensor_type: CameraSensorType,
+    pub hdr: bool,
+    pub hfr: bool,
+}
+
+/// Capabilities of one camera detected by the connected DepthAI device.
+///
+/// This is the Rust representation of `dai::CameraFeatures`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CameraFeatures {
+    pub socket: CameraBoardSocket,
+    pub sensor_name: String,
+    pub width: i32,
+    pub height: i32,
+    pub orientation: CameraImageOrientation,
+    pub supported_types: Vec<CameraSensorType>,
+    pub has_autofocus_ic: bool,
+    pub has_autofocus: bool,
+    pub name: String,
+    pub additional_names: Vec<String>,
+    pub configs: Vec<CameraSensorConfig>,
+    pub calibration_resolution: Option<CameraSensorConfig>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawCameraFov {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    normalized: bool,
+    has_normalized: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawCameraSensorConfig {
+    width: i32,
+    height: i32,
+    min_fps: f32,
+    max_fps: f32,
+    fov: RawCameraFov,
+    #[serde(rename = "type")]
+    sensor_type: i32,
+    hdr: bool,
+    hfr: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawCameraFeatures {
+    socket: i32,
+    sensor_name: String,
+    width: i32,
+    height: i32,
+    orientation: i32,
+    supported_types: Vec<i32>,
+    #[serde(rename = "hasAutofocusIC")]
+    has_autofocus_ic: bool,
+    has_autofocus: bool,
+    name: String,
+    additional_names: Vec<String>,
+    configs: Vec<RawCameraSensorConfig>,
+    calibration_resolution: Option<RawCameraSensorConfig>,
+}
+
+impl From<RawCameraFov> for CameraFov {
+    fn from(raw: RawCameraFov) -> Self {
+        Self {
+            x: raw.x,
+            y: raw.y,
+            width: raw.width,
+            height: raw.height,
+            normalized: raw.normalized,
+            has_normalized: raw.has_normalized,
+        }
+    }
+}
+
+impl From<RawCameraSensorConfig> for CameraSensorConfig {
+    fn from(raw: RawCameraSensorConfig) -> Self {
+        Self {
+            width: raw.width,
+            height: raw.height,
+            min_fps: raw.min_fps,
+            max_fps: raw.max_fps,
+            fov: raw.fov.into(),
+            sensor_type: CameraSensorType::from_raw(raw.sensor_type),
+            hdr: raw.hdr,
+            hfr: raw.hfr,
+        }
+    }
+}
+
+impl From<RawCameraFeatures> for CameraFeatures {
+    fn from(raw: RawCameraFeatures) -> Self {
+        Self {
+            socket: CameraBoardSocket::from_raw(raw.socket),
+            sensor_name: raw.sensor_name,
+            width: raw.width,
+            height: raw.height,
+            orientation: CameraImageOrientation::from_raw(raw.orientation),
+            supported_types: raw
+                .supported_types
+                .into_iter()
+                .map(CameraSensorType::from_raw)
+                .collect(),
+            has_autofocus_ic: raw.has_autofocus_ic,
+            has_autofocus: raw.has_autofocus,
+            name: raw.name,
+            additional_names: raw.additional_names,
+            configs: raw.configs.into_iter().map(Into::into).collect(),
+            calibration_resolution: raw.calibration_resolution.map(Into::into),
+        }
+    }
+}
+
+fn parse_camera_features_json(json: &str) -> Result<Vec<CameraFeatures>> {
+    let raw = serde_json::from_str::<Vec<RawCameraFeatures>>(json).map_err(|error| {
+        DepthaiError::new(format!(
+            "invalid connected camera features JSON from depthai-core: {error}"
+        ))
+    })?;
+    Ok(raw.into_iter().map(Into::into).collect())
 }
 
 impl Device {
@@ -120,6 +270,23 @@ impl Device {
         }
     }
 
+    /// Return detailed capabilities for every camera detected by this device.
+    ///
+    /// This mirrors `dai::DeviceBase::getConnectedCameraFeatures()` and includes
+    /// each sensor's supported resolutions and frame-rate ranges.
+    pub fn connected_camera_features(&self) -> Result<Vec<CameraFeatures>> {
+        clear_error_flag();
+        let raw = unsafe { depthai::dai_device_get_connected_camera_features_json(self.handle) };
+        if raw.is_null() {
+            return Err(last_error("failed to query connected camera features"));
+        }
+        let json = unsafe { CStr::from_ptr(raw) }
+            .to_string_lossy()
+            .into_owned();
+        unsafe { depthai::dai_free_cstring(raw) };
+        parse_camera_features_json(&json)
+    }
+
     /// Set IR laser dot projector intensity (0.0..1.0 on supported devices).
     pub fn set_ir_laser_dot_projector_intensity(&self, intensity: f32) -> Result<()> {
         clear_error_flag();
@@ -169,10 +336,82 @@ pub fn connected_device_ids() -> crate::error::Result<Vec<String>> {
     if raw.is_null() {
         return Err(last_error("failed to query connected device IDs"));
     }
-    let s = unsafe { CStr::from_ptr(raw) }.to_string_lossy().into_owned();
+    let s = unsafe { CStr::from_ptr(raw) }
+        .to_string_lossy()
+        .into_owned();
     unsafe { depthai::dai_free_cstring(raw) };
     if s.is_empty() {
         return Ok(Vec::new());
     }
     Ok(s.split('\n').map(String::from).collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_connected_camera_features_json() {
+        let json = r#"[
+            {
+                "socket": 0,
+                "sensorName": "IMX586",
+                "width": 8000,
+                "height": 6000,
+                "orientation": 3,
+                "supportedTypes": [0],
+                "hasAutofocusIC": true,
+                "hasAutofocus": true,
+                "name": "color",
+                "additionalNames": ["rgb"],
+                "configs": [
+                    {
+                        "width": 1920,
+                        "height": 1080,
+                        "minFps": 5.0,
+                        "maxFps": 120.0,
+                        "fov": {
+                            "x": 0.0,
+                            "y": 0.0,
+                            "width": 1920.0,
+                            "height": 1080.0,
+                            "normalized": false,
+                            "hasNormalized": true
+                        },
+                        "type": 0,
+                        "hdr": false,
+                        "hfr": true
+                    }
+                ],
+                "calibrationResolution": null
+            }
+        ]"#;
+
+        let features = parse_camera_features_json(json).expect("camera features should parse");
+        assert_eq!(features.len(), 1);
+        let camera = &features[0];
+        assert_eq!(camera.socket, CameraBoardSocket::CamA);
+        assert_eq!(camera.sensor_name, "IMX586");
+        assert_eq!(camera.orientation, CameraImageOrientation::Rotate180Deg);
+        assert_eq!(camera.supported_types, vec![CameraSensorType::Color]);
+        assert!(camera.has_autofocus_ic);
+        assert_eq!(camera.configs.len(), 1);
+        assert_eq!(camera.configs[0].width, 1920);
+        assert_eq!(camera.configs[0].height, 1080);
+        assert_eq!(camera.configs[0].max_fps, 120.0);
+        assert!(camera.configs[0].hfr);
+        assert!(camera.configs[0].fov.has_normalized);
+        assert!(camera.calibration_resolution.is_none());
+    }
+
+    #[test]
+    fn rejects_malformed_connected_camera_features_json() {
+        let error =
+            parse_camera_features_json(r#"[{"socket":"CAM_A"}]"#).expect_err("JSON is invalid");
+        assert!(
+            error
+                .to_string()
+                .contains("invalid connected camera features JSON")
+        );
+    }
 }

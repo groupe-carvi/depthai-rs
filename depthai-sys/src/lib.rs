@@ -105,6 +105,7 @@ include_cpp! {
 
     // Device helpers
     generate!("dai::dai_device_get_platform")
+    generate!("dai::dai_device_get_connected_camera_features_json")
     generate!("dai::dai_device_set_ir_laser_dot_projector_intensity")
 
     // StereoDepth configuration helpers

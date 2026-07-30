@@ -213,6 +213,9 @@ API bool dai_threaded_node_is_running(DaiNode node);
 
 // Device helpers
 API int dai_device_get_platform(DaiDevice device);
+// Returned JSON mirrors std::vector<dai::CameraFeatures>.
+// Caller must free with dai_free_cstring().
+API char* dai_device_get_connected_camera_features_json(DaiDevice device);
 API void dai_device_set_ir_laser_dot_projector_intensity(DaiDevice device, float intensity);
 
 // StereoDepth configuration helpers

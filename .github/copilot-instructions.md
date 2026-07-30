@@ -96,6 +96,7 @@ These control `depthai-sys/build.rs` behaviour:
 
 | Variable | Effect |
 |----------|--------|
+| `DEPTHAI_RS_CACHE_DIR` | Override the shared native dependency cache (default: `~/.depthai-rs`) |
 | `DEPTHAI_CORE_ROOT` | Override DepthAI-Core checkout path |
 | `DEPTHAI_SYS_LINK_SHARED=1` | Use shared library linking |
 | `DEPTHAI_STAGE_RUNTIME_DEPS=0` | Skip staging DLLs/`.so` to target/ |
@@ -107,7 +108,7 @@ These control `depthai-sys/build.rs` behaviour:
 ### Platform Notes
 
 - **Linux:** DepthAI-Core is cloned and built via CMake. RPATH is embedded so binaries find staged `.so` files from `$ORIGIN`.
-- **Windows:** Prebuilt `depthai-core-<tag>-win64.zip` is downloaded and cached in `target/dai-build/`. DLLs are staged to `target/{profile}/{,deps,examples}`.
+- **Windows:** Prebuilt DepthAI-Core and OpenCV artifacts are cached by version and target under `~/.depthai-rs/` (or `DEPTHAI_RS_CACHE_DIR`). DLLs are staged to `target/{profile}/{,deps,examples}`.
 - **docs.rs:** Uses `no-default-features = true` + `features = ["docs"]` (set in `[package.metadata.docs.rs]`) to skip native builds entirely.
 
 ### Pipeline Usage Pattern

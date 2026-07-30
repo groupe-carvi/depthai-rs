@@ -1,7 +1,12 @@
 #![allow(warnings)]
 
+#[path = "src/cache_layout.rs"]
+mod cache_layout;
+
 #[cfg(feature = "native")]
 use cmake::Config;
+#[cfg(feature = "native")]
+use fs2::FileExt;
 use once_cell::sync::Lazy;
 #[cfg(feature = "native")]
 use pkg_config::Config as PkgConfig;
@@ -26,22 +31,22 @@ static PROJECT_ROOT: Lazy<PathBuf> = Lazy::new(|| {
     )
 });
 
-static BASE_BUILD_FOLDER_PATH: Lazy<PathBuf> = Lazy::new(|| {
-    let out_dir = env::var("OUT_DIR").unwrap();
-    Path::new(&out_dir)
-        .ancestors()
-        .nth(4)
-        .unwrap()
-        .join("dai-build")
+static CACHE_ROOT_PATH: Lazy<PathBuf> = Lazy::new(|| {
+    cache_layout::cache_root_from_env()
+        .unwrap_or_else(|error| panic!("Failed to resolve depthai-rs native cache: {}", error))
 });
 
 static BUILD_FOLDER_PATH: Lazy<PathBuf> = Lazy::new(|| {
-    // Versioned cache directory so multiple DepthAI-Core versions can coexist.
-    // This enables users to switch Cargo features (e.g. v3-2-1 -> v3-2-0) without
-    // losing the previous build, and ensures we don't accidentally link against the
-    // wrong native artifacts.
     let tag = selected_depthai_core_version().tag();
-    BASE_BUILD_FOLDER_PATH.join(tag)
+    let target = cargo_target();
+    let build_variant = depthai_core_build_variant();
+    cache_layout::depthai_core_cache_dir(&CACHE_ROOT_PATH, tag, &target, &build_variant)
+});
+
+#[cfg(all(feature = "native", feature = "opencv-download"))]
+static OPENCV_CACHE_FOLDER_PATH: Lazy<PathBuf> = Lazy::new(|| {
+    let runtime = selected_depthai_core_version().windows_opencv_runtime();
+    cache_layout::opencv_cache_dir(&CACHE_ROOT_PATH, runtime.opencv_version, &cargo_target())
 });
 
 static GEN_FOLDER_PATH: Lazy<PathBuf> =
@@ -94,6 +99,76 @@ macro_rules! println_build {
     ($($tokens:tt)*) => {
         println!("cargo:warning=\r\x1b[32;1m   {}", format!($($tokens)*))
     }
+}
+
+#[cfg(feature = "native")]
+struct CacheLock {
+    file: File,
+}
+
+#[cfg(feature = "native")]
+impl Drop for CacheLock {
+    fn drop(&mut self) {
+        let _ = FileExt::unlock(&self.file);
+    }
+}
+
+#[cfg(feature = "native")]
+fn acquire_cache_lock(cache_dir: &Path, label: &str) -> Result<CacheLock, String> {
+    let parent = cache_dir
+        .parent()
+        .ok_or_else(|| format!("Cache path has no parent: {}", cache_dir.display()))?;
+    fs::create_dir_all(parent).map_err(|error| {
+        format!(
+            "Failed to create cache directory {}: {}",
+            parent.display(),
+            error
+        )
+    })?;
+
+    let cache_name = cache_dir
+        .file_name()
+        .ok_or_else(|| format!("Cache path has no final component: {}", cache_dir.display()))?;
+    let lock_path = parent.join(format!(".{}.lock", cache_name.to_string_lossy()));
+    let file = File::options()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(&lock_path)
+        .map_err(|error| {
+            format!(
+                "Failed to open cache lock {}: {}",
+                lock_path.display(),
+                error
+            )
+        })?;
+
+    match FileExt::try_lock_exclusive(&file) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+            println_build!(
+                "Waiting for another process to finish populating the {} cache at {}",
+                label,
+                cache_dir.display()
+            );
+            FileExt::lock_exclusive(&file).map_err(|error| {
+                format!(
+                    "Failed to lock cache file {}: {}",
+                    lock_path.display(),
+                    error
+                )
+            })?;
+        }
+        Err(error) => {
+            return Err(format!(
+                "Failed to lock cache file {}: {}",
+                lock_path.display(),
+                error
+            ));
+        }
+    }
+
+    Ok(CacheLock { file })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -204,6 +279,37 @@ fn selected_depthai_core_tag() -> String {
     selected_depthai_core_version().tag().to_string()
 }
 
+fn cargo_target() -> String {
+    env::var("TARGET").expect("Cargo did not provide the TARGET environment variable")
+}
+
+fn depthai_core_build_variant() -> String {
+    if cargo_target().contains("windows") {
+        return "prebuilt".to_string();
+    }
+
+    let link_mode = if env_bool("DEPTHAI_SYS_LINK_SHARED").unwrap_or(false) {
+        "shared"
+    } else {
+        "static"
+    };
+    let dynamic_calibration = if env_bool("DEPTHAI_DYNAMIC_CALIBRATION_SUPPORT").unwrap_or(true) {
+        "on"
+    } else {
+        "off"
+    };
+    let events_manager = if env_bool("DEPTHAI_ENABLE_EVENTS_MANAGER").unwrap_or(true) {
+        "on"
+    } else {
+        "off"
+    };
+
+    format!(
+        "release-{}-dynamic-calibration-{}-events-{}",
+        link_mode, dynamic_calibration, events_manager
+    )
+}
+
 fn depthai_core_winprebuilt_url(tag: &str) -> String {
     // depthai-core release artifacts follow the convention:
     //   https://github.com/luxonis/depthai-core/releases/download/<tag>/depthai-core-<tag>-win64.zip
@@ -227,8 +333,9 @@ fn no_native_build_enabled() -> bool {
 fn main() {
     println!("cargo:rerun-if-changed=src/lib.rs");
     println!("cargo:rerun-if-changed=wrapper/");
-    println!("cargo:rerun-if-changed={}", BUILD_FOLDER_PATH.join("depthai-core").join("include").display());
     println!("cargo:rerun-if-env-changed=DOCS_RS");
+    println!("cargo:rerun-if-env-changed={}", cache_layout::CACHE_DIR_ENV);
+    println!("cargo:rerun-if-env-changed=DEPTHAI_CORE_ROOT");
     println!("cargo:rerun-if-env-changed=DEPTHAI_SYS_LINK_SHARED");
     println!("cargo:rerun-if-env-changed=DEPTHAI_STAGE_RUNTIME_DEPS");
     println!("cargo:rerun-if-env-changed=DEPTHAI_OPENCV_SUPPORT");
@@ -246,6 +353,28 @@ fn main() {
 
     let selected_tag = selected_depthai_core_tag();
     println_build!("Using DepthAI-Core tag: {}", selected_tag);
+
+    if !no_native {
+        #[cfg(feature = "native")]
+        {
+            println!(
+                "cargo:rerun-if-changed={}",
+                BUILD_FOLDER_PATH
+                    .join("depthai-core")
+                    .join("include")
+                    .display()
+            );
+            println!(
+                "cargo::metadata=CACHE_BUILD_DIR={}",
+                BUILD_FOLDER_PATH.display()
+            );
+            println_build!("Using native cache root: {}", CACHE_ROOT_PATH.display());
+            println_build!(
+                "Using DepthAI-Core cache directory: {}",
+                BUILD_FOLDER_PATH.display()
+            );
+        }
+    }
 
     // In `no-native` mode we intentionally avoid resolving/building/linking the native SDK.
     let (depthai_core_lib, windows_static_lib): (Option<PathBuf>, Option<PathBuf>) = if no_native {
@@ -1114,7 +1243,7 @@ fn get_depthai_includes() -> Vec<PathBuf> {
     ];
 
     // When depthai-core is built via CMake, some headers are generated into the build tree
-    // (e.g. dai-build/include/depthai/build/version.hpp). Include that output include dir.
+    // (e.g. the cached build's include/depthai/build/version.hpp). Include that directory.
     let build_include = BUILD_FOLDER_PATH.join("include");
     if build_include.exists() {
         includes.push(build_include);
@@ -1282,11 +1411,61 @@ fn remove_stale_opencv_world_dlls(bin_dir: &Path, selected_world_dll: &str) {
 }
 
 #[cfg(all(feature = "native", feature = "opencv-download"))]
+fn copy_opencv_runtime_dlls(
+    source_bin_dir: &Path,
+    destination_bin_dir: &Path,
+    selected_world_dll: &str,
+) -> io::Result<()> {
+    fs::create_dir_all(destination_bin_dir)?;
+    remove_stale_opencv_world_dlls(destination_bin_dir, selected_world_dll);
+
+    let selected_stem = selected_world_dll
+        .strip_suffix(".dll")
+        .unwrap_or(selected_world_dll)
+        .to_ascii_lowercase();
+
+    for entry in fs::read_dir(source_bin_dir)? {
+        let entry = entry?;
+        let source = entry.path();
+        if !source.is_file() {
+            continue;
+        }
+
+        let Some(file_name) = source.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        let lower = file_name.to_ascii_lowercase();
+        if !lower.starts_with("opencv_") || !lower.ends_with(".dll") {
+            continue;
+        }
+        if lower.starts_with("opencv_world") && !lower.starts_with(&selected_stem) {
+            continue;
+        }
+
+        fs::copy(&source, destination_bin_dir.join(file_name))?;
+    }
+
+    let selected_dll = destination_bin_dir.join(selected_world_dll);
+    selected_dll.exists().then_some(()).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            format!(
+                "{} was not found after copying OpenCV runtime files from {}",
+                selected_world_dll,
+                source_bin_dir.display()
+            ),
+        )
+    })
+}
+
+#[cfg(all(feature = "native", feature = "opencv-download"))]
 fn download_and_prepare_opencv() {
     if !cfg!(target_os = "windows") {
         return;
     }
 
+    let _cache_lock = acquire_cache_lock(&OPENCV_CACHE_FOLDER_PATH, "OpenCV")
+        .expect("Failed to acquire the OpenCV cache lock");
     let opencv_runtime = selected_depthai_core_version().windows_opencv_runtime();
     let opencv_dll_file = opencv_runtime.world_dll;
     let opencv_url = opencv_runtime.url();
@@ -1297,19 +1476,28 @@ fn download_and_prepare_opencv() {
         opencv_dll_file,
     );
 
-    {
-        let bin_dir = get_depthai_core_root().join("bin");
-        let dll = bin_dir.join(opencv_dll_file);
-        if dll.exists() {
-            println_build!(
-                "{} already present in depthai-core/bin, skipping download.",
-                opencv_dll_file
-            );
-            // Even when skipping the download, remove stale world DLLs from a previous
-            // version build so they are not staged alongside the correct one.
-            remove_stale_opencv_world_dlls(&bin_dir, opencv_dll_file);
-            return;
-        }
+    let depthai_bin_dir = get_depthai_core_root().join("bin");
+    let cached_bin_dir = OPENCV_CACHE_FOLDER_PATH.join("bin");
+    if cached_bin_dir.join(opencv_dll_file).exists() {
+        println_build!(
+            "Reusing cached OpenCV {} runtime from {}",
+            opencv_runtime.opencv_version,
+            cached_bin_dir.display()
+        );
+        copy_opencv_runtime_dlls(&cached_bin_dir, &depthai_bin_dir, opencv_dll_file)
+            .expect("Failed to restore OpenCV runtime DLLs from cache");
+        return;
+    }
+
+    if depthai_bin_dir.join(opencv_dll_file).exists() {
+        println_build!(
+            "{} is bundled with DepthAI-Core; adding its runtime files to the shared OpenCV cache.",
+            opencv_dll_file
+        );
+        copy_opencv_runtime_dlls(&depthai_bin_dir, &cached_bin_dir, opencv_dll_file)
+            .expect("Failed to populate the shared OpenCV cache");
+        remove_stale_opencv_world_dlls(&depthai_bin_dir, opencv_dll_file);
+        return;
     }
 
     println_build!(
@@ -1318,7 +1506,7 @@ fn download_and_prepare_opencv() {
         opencv_runtime.opencv_version,
     );
 
-    let extraction_dir = BUILD_FOLDER_PATH.join("opencv_download");
+    let extraction_dir = OPENCV_CACHE_FOLDER_PATH.clone();
     let opencv_exe_path = extraction_dir.join(opencv_url.split('/').last().unwrap());
     // The OpenCV SFX archive typically contains a top-level "opencv/" folder.
     // We extract into `extraction_dir` and then locate the DLL under it.
@@ -1454,50 +1642,21 @@ fn download_and_prepare_opencv() {
         found
     };
 
-    // Copy OpenCV runtime DLL(s) into depthai-core/bin. depthai-core.dll is linked against
-    // opencv_world, and OpenCV may also rely on companion DLLs (e.g. videoio backends).
-    println_build!("Copying OpenCV runtime DLLs into depthai-core/bin...");
-
-    let dest_bin_dir = get_depthai_core_root().join("bin");
-    let _ = fs::create_dir_all(&dest_bin_dir);
-
-    // Remove stale opencv_world*.dll files left over from a previous DepthAI-Core version
-    // before staging the correct one.  Companion DLLs (e.g. opencv_world4130d.dll) that
-    // share the same version stem are preserved.
-    remove_stale_opencv_world_dlls(&dest_bin_dir, opencv_dll_file);
-
-    // Always copy the main opencv_world DLL.
-    let dest_path = dest_bin_dir.join(opencv_dll_file);
-    fs::copy(&dll_path, &dest_path).expect("Failed to copy OpenCV DLL");
-    println_build!("OpenCV DLL copied to {:?}", dest_path);
-
-    // Best-effort: copy any other `opencv_*.dll` found next to it.
-    if let Some(src_bin_dir) = dll_path.parent() {
-        if let Ok(entries) = fs::read_dir(src_bin_dir) {
-            for entry in entries.flatten() {
-                let p = entry.path();
-                if !p.is_file() {
-                    continue;
-                }
-
-                let fname = match p.file_name().and_then(|n| n.to_str()) {
-                    Some(n) => n,
-                    None => continue,
-                };
-
-                let lower = fname.to_ascii_lowercase();
-                if !lower.ends_with(".dll") {
-                    continue;
-                }
-                if !lower.starts_with("opencv_") {
-                    continue;
-                }
-
-                let dest = dest_bin_dir.join(fname);
-                let _ = fs::copy(&p, &dest);
-            }
-        }
-    }
+    // Keep a compact runtime copy at a stable location even though the full extracted
+    // installer is retained. This lets other DepthAI-Core versions restore the matching
+    // OpenCV DLLs without depending on the installer's internal directory layout.
+    let source_bin_dir = dll_path
+        .parent()
+        .expect("OpenCV DLL path did not have a parent directory");
+    copy_opencv_runtime_dlls(source_bin_dir, &cached_bin_dir, opencv_dll_file)
+        .expect("Failed to populate the shared OpenCV cache");
+    copy_opencv_runtime_dlls(&cached_bin_dir, &depthai_bin_dir, opencv_dll_file)
+        .expect("Failed to copy OpenCV runtime DLLs into depthai-core/bin");
+    println_build!(
+        "OpenCV runtime cached at {} and restored into {}",
+        cached_bin_dir.display(),
+        depthai_bin_dir.display()
+    );
 }
 
 #[cfg(feature = "native")]
@@ -1534,6 +1693,8 @@ fn resolve_deps_includes() -> PathBuf {
 #[cfg(feature = "native")]
 fn resolve_depthai_core_lib() -> Result<PathBuf, &'static str> {
     println_build!("Resolving depthai-core library path...");
+    let _cache_lock = acquire_cache_lock(&BUILD_FOLDER_PATH, "DepthAI-Core")
+        .expect("Failed to acquire the DepthAI-Core cache lock");
     let prefer_static = !env_bool("DEPTHAI_SYS_LINK_SHARED").unwrap_or(false);
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let target_dir = Path::new(&out_dir).ancestors().nth(3).unwrap();
@@ -1553,7 +1714,7 @@ fn resolve_depthai_core_lib() -> Result<PathBuf, &'static str> {
             return Ok(import_lib);
         }
 
-        // Some setups may place artifacts directly under dai-build/. If we see a DLL there,
+        // Some setups may place artifacts directly under the cache build directory. If we see a DLL there,
         // try to locate a matching import library in common locations.
         let builds_dll = BUILD_FOLDER_PATH.join("depthai-core.dll");
         if builds_dll.exists() {
@@ -1563,7 +1724,7 @@ fn resolve_depthai_core_lib() -> Result<PathBuf, &'static str> {
             ];
             if let Some(lib) = candidates.into_iter().find(|p| p.exists()) {
                 println_build!(
-                    "Found depthai-core.dll in builds; using import library: {}",
+                    "Found depthai-core.dll in the cache build; using import library: {}",
                     lib.display()
                 );
                 println!(
@@ -1592,7 +1753,7 @@ fn resolve_depthai_core_lib() -> Result<PathBuf, &'static str> {
         // Shared explicitly requested.
         let builds_lib = BUILD_FOLDER_PATH.join("libdepthai-core.so");
         if builds_lib.exists() {
-            println_build!("Found libdepthai-core.so in builds directory.");
+            println_build!("Found libdepthai-core.so in the cache build directory.");
             emit_link_directives(&builds_lib);
             return Ok(builds_lib);
         }
@@ -1730,12 +1891,20 @@ Please point DEPTHAI_CORE_ROOT to a full depthai-core distribution (with include
             let depthai_core_install = get_depthai_windows_prebuilt_binary()
                 .map_err(|_| "Failed to download prebuilt depthai-core.")?;
 
-            // After extracting, check if the library exists
-            if let Some(lib) = probe_depthai_core_lib(depthai_core_install.clone(), prefer_static) {
-                return resolve_depthai_core_lib();
-            } else {
-                panic!("Failed to find depthai-core after downloading prebuilt binary.");
+            let import_lib = depthai_core_install.join("lib").join("depthai-core.lib");
+            if !import_lib.exists() {
+                panic!(
+                    "Failed to find depthai-core import library after downloading prebuilt binary: {}",
+                    import_lib.display()
+                );
             }
+
+            println!(
+                "cargo:rustc-link-search=native={}",
+                import_lib.parent().unwrap().display()
+            );
+            println!("cargo:rustc-link-lib=depthai-core");
+            return Ok(import_lib);
         }
     } else if cfg!(target_os = "linux") {
         if !get_depthai_core_root().exists() {
@@ -1881,7 +2050,7 @@ fn cmake_build_depthai_core(path: PathBuf) -> Option<PathBuf> {
         get_depthai_core_root().display(),
         path.display()
     );
-    
+
     let mut parallel_builds = (num_cpus::get() as f32 * 0.80).ceil().to_string();
 
     if is_wsl() {
@@ -2276,8 +2445,8 @@ fn vcpkg_lib_dir() -> Option<PathBuf> {
 }
 
 fn vcpkg_include_dir() -> Option<PathBuf> {
-    // `vcpkg_lib_dir` returns: <dai-build>/vcpkg_installed/<triplet>/lib
-    // We want:              <dai-build>/vcpkg_installed/<triplet>/include
+    // `vcpkg_lib_dir` returns: <cache-build>/vcpkg_installed/<triplet>/lib
+    // We want:              <cache-build>/vcpkg_installed/<triplet>/include
     let lib = vcpkg_lib_dir()?;
     let triplet = lib.parent()?;
     let include = triplet.join("include");
@@ -2322,7 +2491,7 @@ fn emit_link_directives(path: &Path) {
             // Prefer static linkage by default.
 
             // When linking statically, we must also link depthai-core's transitive deps.
-            // Many of these are provided by the internal vcpkg build under dai-build/vcpkg_installed.
+            // Many of these are provided by the cached internal vcpkg build.
             let vcpkg_lib = vcpkg_lib_dir();
 
             // dynamic_calibration is built as a shared library by depthai-core's CMake.

@@ -34,6 +34,7 @@ native = [
 	"dep:reqwest",
 	"dep:pkg-config",
 	"dep:zip",
+	"dep:fs2",
 ]
 opencv-download = ["dep:sevenz-rust2"]
 no-native = []
@@ -81,3 +82,4 @@ reqwest = { version = "0.13.1", default-features = false, features = ["blocking"
 sevenz-rust2 = { version = "0.20.0", optional = true }
 pkg-config = { version = "0.3.32", optional = true }
 zip = { version = "7.0.0", default-features = false, features = ["deflate"], optional = true }
+fs2 = { version = "0.4.3", optional = true }

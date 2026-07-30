@@ -272,7 +272,10 @@ fn selected_depthai_core_version() -> DepthaiCoreVersion {
         );
     }
 
-    picked.first().copied().unwrap_or(DepthaiCoreVersion::Latest)
+    picked
+        .first()
+        .copied()
+        .unwrap_or(DepthaiCoreVersion::Latest)
 }
 
 fn selected_depthai_core_tag() -> String {
@@ -283,8 +286,48 @@ fn cargo_target() -> String {
     env::var("TARGET").expect("Cargo did not provide the TARGET environment variable")
 }
 
+fn cargo_host() -> String {
+    env::var("HOST").expect("Cargo did not provide the HOST environment variable")
+}
+
+fn cargo_target_cfg(name: &str) -> String {
+    let key = format!("CARGO_CFG_TARGET_{}", name);
+    env::var(&key).unwrap_or_else(|_| {
+        panic!(
+            "Cargo did not provide the {} environment variable for target {}",
+            key,
+            cargo_target()
+        )
+    })
+}
+
+fn target_os_is(expected: &str) -> bool {
+    cargo_target_cfg("OS") == expected
+}
+
+fn target_env_is(expected: &str) -> bool {
+    cargo_target_cfg("ENV") == expected
+}
+
+fn is_cross_compiling() -> bool {
+    cargo_host() != cargo_target()
+}
+
+fn target_tool_env(name: &str) -> Option<String> {
+    let target = cargo_target();
+    let underscored_target = target.replace('-', "_");
+    [
+        format!("{name}_{target}"),
+        format!("{name}_{underscored_target}"),
+        format!("TARGET_{name}"),
+        name.to_string(),
+    ]
+    .into_iter()
+    .find_map(|key| env::var(&key).ok().filter(|value| !value.trim().is_empty()))
+}
+
 fn depthai_core_build_variant() -> String {
-    if cargo_target().contains("windows") {
+    if target_os_is("windows") {
         return "prebuilt".to_string();
     }
 
@@ -342,6 +385,20 @@ fn main() {
     println!("cargo:rerun-if-env-changed=DEPTHAI_DYNAMIC_CALIBRATION_SUPPORT");
     println!("cargo:rerun-if-env-changed=DEPTHAI_ENABLE_EVENTS_MANAGER");
     println!("cargo:rerun-if-env-changed=DEPTHAI_RPATH_DISABLE");
+    println!("cargo:rerun-if-env-changed=CMAKE_GENERATOR");
+    println!("cargo:rerun-if-env-changed=CMAKE_TOOLCHAIN_FILE");
+    println!("cargo:rerun-if-env-changed=CMAKE_SYSROOT");
+    println!("cargo:rerun-if-env-changed=VCPKG_TARGET_TRIPLET");
+    for name in ["CC", "CXX", "SYSROOT"] {
+        let target = cargo_target();
+        println!("cargo:rerun-if-env-changed={name}");
+        println!("cargo:rerun-if-env-changed=TARGET_{name}");
+        println!("cargo:rerun-if-env-changed={name}_{target}");
+        println!(
+            "cargo:rerun-if-env-changed={name}_{}",
+            target.replace('-', "_")
+        );
+    }
     println_build!("Checking for depthai-core...");
 
     let no_native = no_native_build_enabled();
@@ -384,7 +441,7 @@ fn main() {
         {
             let depthai_core_lib =
                 resolve_depthai_core_lib().expect("Failed to resolve depthai-core path");
-            let windows_static_lib = if cfg!(target_os = "windows") {
+            let windows_static_lib = if target_os_is("windows") {
                 Some(get_depthai_core_root().join("lib").join("depthai-core.lib"))
             } else {
                 None
@@ -394,7 +451,9 @@ fn main() {
 
         #[cfg(not(feature = "native"))]
         {
-            panic!("depthai-sys was built without the `native` feature enabled, but a native build was requested. Enable default features or enable the `native` feature.");
+            panic!(
+                "depthai-sys was built without the `native` feature enabled, but a native build was requested. Enable default features or enable the `native` feature."
+            );
         }
     };
     let out_dir = env::var("OUT_DIR").unwrap();
@@ -406,7 +465,7 @@ fn main() {
     // tests, and examples work out-of-the-box. This can be disabled for advanced packaging.
     let stage_runtime_deps = env_bool("DEPTHAI_STAGE_RUNTIME_DEPS").unwrap_or(true);
 
-    if cfg!(target_os = "windows") {
+    if target_os_is("windows") {
         ensure_libclang_path_for_windows();
         if !no_native {
             #[cfg(feature = "native")]
@@ -439,7 +498,9 @@ fn main() {
             }
             #[cfg(not(feature = "native"))]
             {
-                panic!("depthai-sys was built without the `native` feature enabled, but a native build was requested. Enable default features or enable the `native` feature.");
+                panic!(
+                    "depthai-sys was built without the `native` feature enabled, but a native build was requested. Enable default features or enable the `native` feature."
+                );
             }
         }
     }
@@ -453,7 +514,7 @@ fn main() {
         build_cpp_wrapper(&include_paths, opencv_enabled);
     }
 
-    if cfg!(target_os = "windows") {
+    if target_os_is("windows") {
         if !no_native && windows_static_lib.clone().is_some_and(|p| p.exists()) {
             let lib_path = windows_static_lib.clone().unwrap();
             let lib_name = lib_path.file_name().unwrap().to_str().unwrap();
@@ -545,7 +606,8 @@ fn main() {
             println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN");
         }
 
-        let depthai_core_lib = depthai_core_lib.expect("depthai-core path should be available when not in no-native mode");
+        let depthai_core_lib = depthai_core_lib
+            .expect("depthai-core path should be available when not in no-native mode");
 
         match depthai_core_lib.extension().and_then(|e| e.to_str()) {
             Some("so") => {
@@ -577,14 +639,17 @@ fn main() {
                 println_build!("Using static libdepthai-core.a (no runtime .so to copy)");
             }
             _ => {
-                println_build!("Unknown depthai-core artifact type: {}", depthai_core_lib.display());
+                println_build!(
+                    "Unknown depthai-core artifact type: {}",
+                    depthai_core_lib.display()
+                );
             }
         }
 
         // Even when DepthAI-Core itself is linked statically, some features (notably
         // Dynamic Calibration) and some vcpkg-provided deps (FFmpeg, libusb) are still
         // dynamically linked on Linux. Stage those .so files next to executables.
-        if cfg!(target_os = "linux") {
+        if target_os_is("linux") {
             if stage_runtime_deps {
                 stage_linux_runtime_deps(target_dir, &deps_dir, &examples_dir);
             } else {
@@ -749,7 +814,7 @@ fn find_dynamic_calibration_so() -> Option<PathBuf> {
 }
 
 fn ensure_libclang_path_for_windows() {
-    if !cfg!(target_os = "windows") {
+    if !target_os_is("windows") {
         return;
     }
 
@@ -893,11 +958,10 @@ fn ensure_libclang_path_for_windows() {
         let libclang = dir.join("libclang.dll");
         let clang = dir.join("clang.dll");
         if libclang.exists() || clang.exists() {
-            println_build!(
-                "Setting LIBCLANG_PATH automatically to: {}",
-                dir.display()
-            );
-            unsafe {env::set_var("LIBCLANG_PATH", &dir);}
+            println_build!("Setting LIBCLANG_PATH automatically to: {}", dir.display());
+            unsafe {
+                env::set_var("LIBCLANG_PATH", &dir);
+            }
             return;
         }
     }
@@ -927,7 +991,7 @@ fn windows_clang_target_triple() -> String {
 }
 
 fn windows_msvc_isystem_args() -> Vec<String> {
-    if !cfg!(target_os = "windows") {
+    if !target_os_is("windows") {
         return Vec::new();
     }
 
@@ -1033,7 +1097,8 @@ fn find_windows_kit_10_include_root_and_version() -> Option<(PathBuf, String)> {
 
 fn vswhere_latest_installation_path() -> Option<PathBuf> {
     // vswhere ships with Visual Studio Installer.
-    let vswhere = PathBuf::from(r"C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe");
+    let vswhere =
+        PathBuf::from(r"C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe");
     if !vswhere.exists() {
         return None;
     }
@@ -1118,7 +1183,9 @@ fn build_with_autocxx(no_native: bool) -> Vec<PathBuf> {
 
         #[cfg(not(feature = "native"))]
         {
-            panic!("depthai-sys was built without the `native` feature enabled, but a native build was requested. Enable default features or enable the `native` feature.");
+            panic!(
+                "depthai-sys was built without the `native` feature enabled, but a native build was requested. Enable default features or enable the `native` feature."
+            );
         }
     } else {
         println_build!("no-native: using minimal include path set (wrapper only)");
@@ -1139,15 +1206,22 @@ fn build_with_autocxx(no_native: bool) -> Vec<PathBuf> {
     // VS/Windows SDK installation.
     let mut extra_clang_args: Vec<String> = vec!["-std=c++17".to_string()];
 
-    if cfg!(target_os = "windows") {
+    if target_os_is("windows") {
         extra_clang_args.push(format!("--target={}", windows_clang_target_triple()));
         extra_clang_args.push("-fms-compatibility".to_string());
         extra_clang_args.push("-fms-extensions".to_string());
         extra_clang_args.extend(windows_msvc_isystem_args());
     }
 
-    if cfg!(target_arch = "aarch64") {
-        extra_clang_args.push("-I/usr/lib/gcc/aarch64-linux-gnu/13/include".to_string());
+    if is_cross_compiling() && !target_os_is("windows") {
+        extra_clang_args.push(format!("--target={}", cargo_target()));
+        if let Some(sysroot) = target_tool_env("SYSROOT")
+            .or_else(|| env::var("CMAKE_SYSROOT").ok())
+            .or_else(|| env::var("PKG_CONFIG_SYSROOT_DIR").ok())
+            .filter(|value| !value.trim().is_empty())
+        {
+            extra_clang_args.push(format!("--sysroot={sysroot}"));
+        }
     }
 
     if no_native {
@@ -1164,7 +1238,7 @@ fn build_with_autocxx(no_native: bool) -> Vec<PathBuf> {
     // `extra_clang_args` affects the bindgen/clang parsing step, but the generated C++ glue is
     // compiled separately via cc-rs. Define the same macro for that compilation too.
     if no_native {
-        if cfg!(target_os = "windows") {
+        if target_os_is("windows") {
             build.flag("/DDEPTHAI_SYS_NO_NATIVE");
         } else {
             build.flag("-DDEPTHAI_SYS_NO_NATIVE");
@@ -1172,7 +1246,7 @@ fn build_with_autocxx(no_native: bool) -> Vec<PathBuf> {
     }
 
     // Set C++ standard
-    if cfg!(target_os = "windows") {
+    if target_os_is("windows") {
         build.flag("/std:c++17");
     } else {
         build.flag("-std=c++17");
@@ -1200,20 +1274,24 @@ fn build_cpp_wrapper(include_paths: &[PathBuf], opencv_enabled: bool) {
 
     // cc-rs respects CFLAGS/CXXFLAGS. On Windows/MSVC these are often set to GCC-style
     // values (e.g. "-std=c++17"), which `cl.exe` does not understand and can break the build.
-    if cfg!(target_env = "msvc") {
+    if target_env_is("msvc") {
         if env::var("CXXFLAGS")
             .ok()
             .is_some_and(|v| v.contains("-std=") || v.contains("-stdlib=") || v.contains("-f"))
         {
             println_build!("Removing CXXFLAGS for MSVC wrapper compilation.");
-            unsafe{env::remove_var("CXXFLAGS");}
+            unsafe {
+                env::remove_var("CXXFLAGS");
+            }
         }
         if env::var("CFLAGS")
             .ok()
             .is_some_and(|v| v.contains("-std=") || v.contains("-f"))
         {
             println_build!("Removing CFLAGS for MSVC wrapper compilation.");
-            unsafe{env::remove_var("CFLAGS");}
+            unsafe {
+                env::remove_var("CFLAGS");
+            }
         }
     }
 
@@ -1275,7 +1353,7 @@ fn get_depthai_includes() -> Vec<PathBuf> {
     }
 
     // Linux-only additional include
-    if cfg!(target_os = "linux") {
+    if target_os_is("linux") {
         let bootloader = get_depthai_core_root()
             .join("shared")
             .join("depthai-bootloader-shared")
@@ -1460,7 +1538,7 @@ fn copy_opencv_runtime_dlls(
 
 #[cfg(all(feature = "native", feature = "opencv-download"))]
 fn download_and_prepare_opencv() {
-    if !cfg!(target_os = "windows") {
+    if !target_os_is("windows") {
         return;
     }
 
@@ -1628,7 +1706,9 @@ fn download_and_prepare_opencv() {
             .filter_map(|e| e.ok())
             .find(|e| {
                 e.file_type().is_file()
-                    && e.file_name().to_string_lossy().eq_ignore_ascii_case(opencv_dll_file)
+                    && e.file_name()
+                        .to_string_lossy()
+                        .eq_ignore_ascii_case(opencv_dll_file)
             })
             .map(|e| e.into_path())
             .unwrap_or_else(|| {
@@ -1700,7 +1780,7 @@ fn resolve_depthai_core_lib() -> Result<PathBuf, &'static str> {
     let target_dir = Path::new(&out_dir).ancestors().nth(3).unwrap();
     let deps_dir = Path::new(&target_dir).join("deps");
 
-    if cfg!(target_os = "windows") {
+    if target_os_is("windows") {
         // On Windows (MSVC), linking must be done via the import library (.lib), not the DLL.
         // Prefer the import library next to the configured DEPTHAI_CORE_ROOT first.
         let import_lib = get_depthai_core_root().join("lib").join("depthai-core.lib");
@@ -1763,9 +1843,10 @@ fn resolve_depthai_core_lib() -> Result<PathBuf, &'static str> {
         "Searching for depthai-core library in target directory: {}",
         target_dir.display()
     );
-    if cfg!(target_os = "windows")
+    if target_os_is("windows")
         && target_dir.join("depthai-core.dll").exists()
-        && (target_dir.join("depthai-core.lib").exists() || deps_dir.join("depthai-core.lib").exists())
+        && (target_dir.join("depthai-core.lib").exists()
+            || deps_dir.join("depthai-core.lib").exists())
         && depthai_core_headers_present()
     {
         let lib = if target_dir.join("depthai-core.lib").exists() {
@@ -1777,7 +1858,10 @@ fn resolve_depthai_core_lib() -> Result<PathBuf, &'static str> {
             "Found depthai-core artifacts in target dir; using import library: {}",
             lib.display()
         );
-        println!("cargo:rustc-link-search=native={}", lib.parent().unwrap().display());
+        println!(
+            "cargo:rustc-link-search=native={}",
+            lib.parent().unwrap().display()
+        );
         println!("cargo:rustc-link-lib=depthai-core");
         return Ok(lib);
     } else if !prefer_static
@@ -1786,7 +1870,11 @@ fn resolve_depthai_core_lib() -> Result<PathBuf, &'static str> {
     {
         // Shared path only when explicitly requested.
         let candidate = target_dir.join("libdepthai-core.so");
-        println_build!("Found {} in OUT_DIR: {}", candidate.display(), target_dir.display());
+        println_build!(
+            "Found {} in OUT_DIR: {}",
+            candidate.display(),
+            target_dir.display()
+        );
         emit_link_directives(&candidate);
         return Ok(candidate);
     }
@@ -1807,7 +1895,7 @@ fn resolve_depthai_core_lib() -> Result<PathBuf, &'static str> {
         } else {
             println_build!("Found depthai-core library at: {}", found_lib.display());
 
-            if cfg!(target_os = "windows") {
+            if target_os_is("windows") {
                 // Windows-specific handling
                 if found_lib
                     .extension()
@@ -1872,7 +1960,7 @@ fn resolve_depthai_core_lib() -> Result<PathBuf, &'static str> {
 
     println_build!("Depthai-core library not found, proceeding to build or download...");
 
-    if cfg!(target_os = "windows") {
+    if target_os_is("windows") {
         if !depthai_core_headers_present() {
             if env::var_os("DEPTHAI_CORE_ROOT").is_some() {
                 panic!(
@@ -1906,7 +1994,7 @@ Please point DEPTHAI_CORE_ROOT to a full depthai-core distribution (with include
             println!("cargo:rustc-link-lib=depthai-core");
             return Ok(import_lib);
         }
-    } else if cfg!(target_os = "linux") {
+    } else if target_os_is("linux") {
         if !get_depthai_core_root().exists() {
             let clone_path = BUILD_FOLDER_PATH.join("depthai-core");
 
@@ -1964,7 +2052,7 @@ fn probe_depthai_core_lib(out: PathBuf, prefer_static: bool) -> Option<PathBuf> 
     let target_dir = Path::new(&out_dir).ancestors().nth(3).unwrap();
     let deps_dir = Path::new(&target_dir).join("deps");
 
-    let lib_path = if cfg!(target_os = "windows") {
+    let lib_path = if target_os_is("windows") {
         deps_dir.join("depthai-core.dll")
     } else if prefer_static {
         deps_dir.join("libdepthai-core.a")
@@ -1977,20 +2065,22 @@ fn probe_depthai_core_lib(out: PathBuf, prefer_static: bool) -> Option<PathBuf> 
         deps_dir.display()
     );
     let win_static_lib_path =
-        if cfg!(target_os = "windows") && deps_dir.join("depthai-core.lib").exists() {
+        if target_os_is("windows") && deps_dir.join("depthai-core.lib").exists() {
             Some(deps_dir.join("depthai-core.lib"))
         } else {
             None
         };
 
-    if lib_path.exists() && (cfg!(not(target_os = "windows")) || win_static_lib_path.is_some_and(|p| p.exists())) {
+    if lib_path.exists()
+        && (!target_os_is("windows") || win_static_lib_path.is_some_and(|path| path.exists()))
+    {
         println_build!("Found depthai-core library at: {}", lib_path.display());
         return Some(lib_path);
     }
 
     // Check if pkg-config can find depthai-core
     // This is only applicable for Linux and macOS, as Windows does not use pkg-config
-    if cfg!(target_os = "linux") || cfg!(target_os = "macos") {
+    if target_os_is("linux") || target_os_is("macos") {
         let mut cfg = PkgConfig::new();
         let prob_res = cfg
             .atleast_version("3.0.0")
@@ -2015,7 +2105,7 @@ fn probe_depthai_core_lib(out: PathBuf, prefer_static: bool) -> Option<PathBuf> 
     }
 
     // Deterministic probing: prefer the requested artifact type first.
-    let preferred_names: &[&str] = if cfg!(target_os = "windows") {
+    let preferred_names: &[&str] = if target_os_is("windows") {
         &["depthai-core.dll", "depthai-core.lib"]
     } else if prefer_static {
         &["libdepthai-core.a", "libdepthai-core.so"]
@@ -2034,7 +2124,9 @@ fn probe_depthai_core_lib(out: PathBuf, prefer_static: bool) -> Option<PathBuf> 
                     && entry.file_name() != "bindings"
             })
             .filter_map(|e| e.ok())
-            .find(|e| e.path().is_file() && e.path().file_name().and_then(|n| n.to_str()) == Some(*name))
+            .find(|e| {
+                e.path().is_file() && e.path().file_name().and_then(|n| n.to_str()) == Some(*name)
+            })
         {
             return Some(found.path().to_path_buf());
         }
@@ -2059,11 +2151,13 @@ fn cmake_build_depthai_core(path: PathBuf) -> Option<PathBuf> {
     }
 
     let ninja_available = is_tool_available("ninja", "--version");
-    let generator = if ninja_available {
-        "Ninja"
-    } else {
-        "Unix Makefiles"
-    };
+    let generator = env::var("CMAKE_GENERATOR").unwrap_or_else(|_| {
+        if ninja_available {
+            "Ninja".to_string()
+        } else {
+            "Unix Makefiles".to_string()
+        }
+    });
 
     let prefer_static = !env_bool("DEPTHAI_SYS_LINK_SHARED").unwrap_or(false);
     // depthai-core compiles some sources which unconditionally include OpenCV headers.
@@ -2131,15 +2225,44 @@ fn cmake_build_depthai_core(path: PathBuf) -> Option<PathBuf> {
         parts.join(":")
     };
 
+    let cross_compiling = is_cross_compiling();
+    let cmake_toolchain = env::var("CMAKE_TOOLCHAIN_FILE")
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+    let c_compiler = target_tool_env("CC");
+    let cxx_compiler = target_tool_env("CXX");
+
+    if cross_compiling
+        && cmake_toolchain.is_none()
+        && (c_compiler.is_none() || cxx_compiler.is_none())
+    {
+        panic!(
+            "Cross-compiling depthai-core from {} to {} requires either \
+CMAKE_TOOLCHAIN_FILE or both target-aware CC/CXX variables (for example \
+CC_aarch64_unknown_linux_gnu and CXX_aarch64_unknown_linux_gnu).",
+            cargo_host(),
+            cargo_target()
+        );
+    }
+
+    println_build!(
+        "CMake target: host={}, target={}, cross={}, generator={}",
+        cargo_host(),
+        cargo_target(),
+        cross_compiling,
+        generator
+    );
+
     let mut cmd = Command::new("cmake");
     cmd.arg("-S")
         .arg(get_depthai_core_root().clone())
         .arg("-B")
         .arg(&path)
         .arg("-DCMAKE_BUILD_TYPE=Release")
-        .arg(format!("-DBUILD_SHARED_LIBS={}", if prefer_static { "OFF" } else { "ON" }))
-        .arg("-DCMAKE_C_COMPILER=/usr/bin/gcc")
-        .arg("-DCMAKE_CXX_COMPILER=/usr/bin/g++")
+        .arg(format!(
+            "-DBUILD_SHARED_LIBS={}",
+            if prefer_static { "OFF" } else { "ON" }
+        ))
         // Ensure vcpkg manifest features are enabled (notably `opencv-support`).
         .arg("-DDEPTHAI_VCPKG_INTERNAL_ONLY:BOOL=OFF")
         .arg(format!(
@@ -2156,10 +2279,65 @@ fn cmake_build_depthai_core(path: PathBuf) -> Option<PathBuf> {
             bool_to_cmake(events_manager_support)
         ))
         .arg("-G")
-        .arg(generator)
+        .arg(&generator)
         .env("PATH", &augmented_path)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
+
+    if let Some(toolchain) = cmake_toolchain {
+        cmd.arg(format!("-DCMAKE_TOOLCHAIN_FILE={toolchain}"));
+    }
+    if let Some(compiler) = c_compiler {
+        cmd.arg(format!("-DCMAKE_C_COMPILER={compiler}"));
+    } else if !cross_compiling {
+        cmd.arg("-DCMAKE_C_COMPILER=gcc");
+    }
+    if let Some(compiler) = cxx_compiler {
+        cmd.arg(format!("-DCMAKE_CXX_COMPILER={compiler}"));
+    } else if !cross_compiling {
+        cmd.arg("-DCMAKE_CXX_COMPILER=g++");
+    }
+
+    if cross_compiling {
+        let cmake_system_name = match cargo_target_cfg("OS").as_str() {
+            "linux" => "Linux",
+            "macos" => "Darwin",
+            "windows" => "Windows",
+            other => panic!(
+                "depthai-core cross-build does not have a CMake system-name mapping for target OS {other}"
+            ),
+        };
+        cmd.arg(format!("-DCMAKE_SYSTEM_NAME={cmake_system_name}"))
+            .arg(format!(
+                "-DCMAKE_SYSTEM_PROCESSOR={}",
+                cargo_target_cfg("ARCH")
+            ));
+    }
+
+    if let Some(sysroot) = env::var("CMAKE_SYSROOT")
+        .ok()
+        .or_else(|| target_tool_env("SYSROOT"))
+        .filter(|value| !value.trim().is_empty())
+    {
+        cmd.arg(format!("-DCMAKE_SYSROOT={sysroot}"));
+    }
+
+    let vcpkg_target_triplet = env::var("VCPKG_TARGET_TRIPLET")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            match (
+                cargo_target_cfg("ARCH").as_str(),
+                cargo_target_cfg("OS").as_str(),
+            ) {
+                ("aarch64", "linux") => Some("arm64-linux".to_string()),
+                ("x86_64", "linux") => Some("x64-linux".to_string()),
+                _ => None,
+            }
+        });
+    if let Some(triplet) = vcpkg_target_triplet {
+        cmd.arg(format!("-DVCPKG_TARGET_TRIPLET={triplet}"));
+    }
 
     let status = cmd.status().expect("Failed to run CMake configuration");
 
@@ -2386,7 +2564,7 @@ fn is_tool_available(tool: &str, vers_cmd: &str) -> bool {
 }
 
 fn is_wsl() -> bool {
-    if cfg!(target_os = "linux") {
+    if target_os_is("linux") {
         if let Ok(wsl) = std::env::var("WSL_DISTRO_NAME") {
             println_build!("Running on WSL: {}", wsl);
             return true;
@@ -2472,7 +2650,7 @@ fn link_all_static_libs_with_prefix(libdir: &Path, prefix: &str) {
     libs.dedup();
 
     for lib in libs {
-        if cfg!(target_os = "linux") {
+        if target_os_is("linux") {
             println!("cargo:rustc-link-lib=static:+whole-archive={}", lib);
         } else {
             println!("cargo:rustc-link-lib=static={}", lib);
@@ -2506,12 +2684,13 @@ fn emit_link_directives(path: &Path) {
             // linking against system OpenCV can fail due to ABI / symbol signature differences
             // (e.g. cv::cvtColor gaining an AlgorithmHint parameter in newer OpenCV).
             let vcpkg_opencv_available = vcpkg_lib.as_ref().is_some_and(|libdir| {
-                libdir.join("libopencv_core4.a").exists() && libdir.join("libopencv_imgproc4.a").exists()
+                libdir.join("libopencv_core4.a").exists()
+                    && libdir.join("libopencv_imgproc4.a").exists()
             });
 
             // Only prefer system OpenCV if we *don't* have a vcpkg OpenCV build to match.
             let system_opencv_available = !vcpkg_opencv_available
-                && (cfg!(target_os = "linux") || cfg!(target_os = "macos"))
+                && (target_os_is("linux") || target_os_is("macos"))
                 && PkgConfig::new()
                     .cargo_metadata(false)
                     .probe("opencv4")
@@ -2522,7 +2701,7 @@ fn emit_link_directives(path: &Path) {
 
                 // If we end up linking any shared libs from vcpkg (e.g. ffmpeg, libusb),
                 // set an rpath so binaries can run without manual LD_LIBRARY_PATH.
-                if cfg!(target_os = "linux") {
+                if target_os_is("linux") {
                     // NOTE: On some toolchains, passing multiple `-Wl,-rpath,...` only keeps
                     // the last value. Prefer a single RUNPATH containing both directories.
                     let mut parts: Vec<String> = vec!["$ORIGIN".to_string()];
@@ -2541,7 +2720,7 @@ fn emit_link_directives(path: &Path) {
 
             // Link depthai-core itself.
             // (Linking by name keeps behavior consistent with Cargo/rustc link handling.)
-            if cfg!(target_os = "linux") {
+            if target_os_is("linux") {
                 println!("cargo:rustc-link-lib=static:+whole-archive=depthai-core");
             } else {
                 println!("cargo:rustc-link-lib=static=depthai-core");
@@ -2551,7 +2730,7 @@ fn emit_link_directives(path: &Path) {
             let xlink_dir = BUILD_FOLDER_PATH.join("_deps").join("xlink-build");
             if xlink_dir.join("libXLink.a").exists() {
                 println!("cargo:rustc-link-search=native={}", xlink_dir.display());
-                if cfg!(target_os = "linux") {
+                if target_os_is("linux") {
                     println!("cargo:rustc-link-lib=static:+whole-archive=XLink");
                 } else {
                     println!("cargo:rustc-link-lib=static=XLink");
@@ -2560,8 +2739,11 @@ fn emit_link_directives(path: &Path) {
 
             let resources = BUILD_FOLDER_PATH.join("libdepthai-resources.a");
             if resources.exists() {
-                println!("cargo:rustc-link-search=native={}", BUILD_FOLDER_PATH.display());
-                if cfg!(target_os = "linux") {
+                println!(
+                    "cargo:rustc-link-search=native={}",
+                    BUILD_FOLDER_PATH.display()
+                );
+                if target_os_is("linux") {
                     println!("cargo:rustc-link-lib=static:+whole-archive=depthai-resources");
                 } else {
                     println!("cargo:rustc-link-lib=static=depthai-resources");
@@ -2570,7 +2752,7 @@ fn emit_link_directives(path: &Path) {
 
             // Protobuf-generated messages for depthai-core live in a separate archive.
             if protos_dir.join("libmessages.a").exists() {
-                if cfg!(target_os = "linux") {
+                if target_os_is("linux") {
                     println!("cargo:rustc-link-lib=static:+whole-archive=messages");
                 } else {
                     println!("cargo:rustc-link-lib=static=messages");
@@ -2581,7 +2763,7 @@ fn emit_link_directives(path: &Path) {
             let foxglove_dir = BUILD_FOLDER_PATH.join("foxglove-websocket");
             if foxglove_dir.join("libfoxglove_websocket.a").exists() {
                 println!("cargo:rustc-link-search=native={}", foxglove_dir.display());
-                if cfg!(target_os = "linux") {
+                if target_os_is("linux") {
                     println!("cargo:rustc-link-lib=static:+whole-archive=foxglove_websocket");
                 } else {
                     println!("cargo:rustc-link-lib=static=foxglove_websocket");
@@ -2598,7 +2780,7 @@ fn emit_link_directives(path: &Path) {
             if let Some(ref libdir) = vcpkg_lib {
                 let static_if_exists = |fname: &str, name: &str| {
                     if libdir.join(fname).exists() {
-                        if cfg!(target_os = "linux") {
+                        if target_os_is("linux") {
                             println!("cargo:rustc-link-lib=static:+whole-archive={}", name);
                         } else {
                             println!("cargo:rustc-link-lib=static={}", name);
@@ -2691,13 +2873,13 @@ fn emit_link_directives(path: &Path) {
 
                 // Protobuf runtime.
                 if libdir.join("libprotobuf.a").exists() {
-                    if cfg!(target_os = "linux") {
+                    if target_os_is("linux") {
                         println!("cargo:rustc-link-lib=static:+whole-archive=protobuf");
                     } else {
                         println!("cargo:rustc-link-lib=static=protobuf");
                     }
                 } else if libdir.join("libprotobuf-lite.a").exists() {
-                    if cfg!(target_os = "linux") {
+                    if target_os_is("linux") {
                         println!("cargo:rustc-link-lib=static:+whole-archive=protobuf-lite");
                     } else {
                         println!("cargo:rustc-link-lib=static=protobuf-lite");
@@ -2728,11 +2910,13 @@ fn emit_link_directives(path: &Path) {
                 static_if_exists("libcrypto.a", "crypto");
 
                 // Newer protobuf builds rely on abseil.
-                if libdir
-                    .read_dir()
-                    .ok()
-                    .is_some_and(|mut it| it.any(|e| e.ok().is_some_and(|e| e.file_name().to_string_lossy().starts_with("libabsl_"))))
-                {
+                if libdir.read_dir().ok().is_some_and(|mut it| {
+                    it.any(|e| {
+                        e.ok().is_some_and(|e| {
+                            e.file_name().to_string_lossy().starts_with("libabsl_")
+                        })
+                    })
+                }) {
                     link_all_static_libs_with_prefix(libdir, "libabsl_");
                 }
 
@@ -2754,10 +2938,14 @@ fn emit_link_directives(path: &Path) {
             }
 
             // Common system libs on Linux.
-            if cfg!(target_os = "linux") {
+            if target_os_is("linux") {
                 // depthai-core uses backward-cpp with libdw/libelf on Linux.
                 // Link these explicitly to avoid undefined symbols like dwfl_end / dwarf_*.
-                if PkgConfig::new().cargo_metadata(false).probe("libdw").is_ok() {
+                if PkgConfig::new()
+                    .cargo_metadata(false)
+                    .probe("libdw")
+                    .is_ok()
+                {
                     println!("cargo:rustc-link-lib=dw");
                     println!("cargo:rustc-link-lib=elf");
                 }

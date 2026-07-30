@@ -517,6 +517,7 @@ pub mod rerun_host_node;
 pub mod rgbd;
 pub mod stereo_depth;
 pub mod threaded_host_node;
+pub mod timestamp;
 pub mod video_encoder;
 
 pub use error::{DepthaiError, Result};
@@ -525,7 +526,7 @@ pub use pipeline::{CreateInPipeline, CreateInPipelineWith, DeviceNode, DeviceNod
 pub use device::{Device, DevicePlatform, connected_device_ids};
 pub use pipeline::Pipeline;
 
-pub use common::CameraImageOrientation;
+pub use common::{CameraExposureOffset, CameraImageOrientation};
 pub use encoded_frame::{EncodedFrame, EncodedFrameProfile, EncodedFrameQueue, EncodedFrameType};
 pub use gate::{GateControl, GateNode};
 pub use host_node::{Buffer, HostNode, HostNodeImpl, MessageGroup};
@@ -548,4 +549,5 @@ pub use rerun_host_node::{
 pub use rgbd::{DepthUnit, RgbdData, RgbdNode};
 pub use stereo_depth::{PresetMode as StereoPresetMode, StereoDepthNode};
 pub use threaded_host_node::{ThreadedHostNode, ThreadedHostNodeContext, ThreadedHostNodeImpl};
+pub use timestamp::{DeviceClock, DeviceTimestamp, HostClock, HostTimestamp, MonotonicTimestamp};
 pub use video_encoder::{VideoEncoderNode, VideoEncoderProfile, VideoEncoderRateControlMode};

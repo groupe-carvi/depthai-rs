@@ -7,6 +7,7 @@
 #include "depthai/pipeline/datatype/PointCloudData.hpp"
 #include "depthai/pipeline/datatype/RGBDData.hpp"
 #include "depthai/pipeline/datatype/EncodedFrame.hpp"
+#include "depthai/utility/Clock.hpp"
 #include "XLink/XLink.h"
 #include "XLink/XLinkPublicDefines.h"
 
@@ -51,6 +52,7 @@
 #include <type_traits>
 #include <unordered_map>
 #include <functional>
+#include <utility>
 
 // Global error storage
 static thread_local std::string last_error;
@@ -83,6 +85,298 @@ static bool _dai_optionalish_to_out(const T& value, Out* out) {
     } else {
         *out = static_cast<Out>(value);
         return true;
+    }
+}
+
+template <typename T, typename = void>
+struct _dai_has_timestamp_system : std::false_type {};
+
+template <typename T>
+struct _dai_has_timestamp_system<T, std::void_t<decltype(std::declval<const T&>().getTimestampSystem())>> : std::true_type {};
+
+template <typename T, typename = void>
+struct _dai_has_set_timestamp_system : std::false_type {};
+
+template <typename T>
+struct _dai_has_set_timestamp_system<
+    T,
+    std::void_t<decltype(std::declval<T&>().setTimestampSystem(
+        std::declval<std::optional<std::chrono::system_clock::time_point>>()))>> : std::true_type {};
+
+template <typename T, typename = void>
+struct _dai_has_timestamp_system_with_offset : std::false_type {};
+
+template <typename T>
+struct _dai_has_timestamp_system_with_offset<
+    T,
+    std::void_t<decltype(std::declval<const T&>().getTimestampSystem(dai::CameraExposureOffset::START))>> : std::true_type {};
+
+template <typename TimePoint>
+static int64_t _dai_time_point_to_nanoseconds(const TimePoint& timestamp) {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(timestamp.time_since_epoch()).count();
+}
+
+template <typename Message>
+static bool _dai_get_timestamp_ns(void* handle, int64_t* timestamp_ns, bool device_clock, const char* function_name) {
+    if(!handle) {
+        last_error = std::string(function_name) + ": null message";
+        return false;
+    }
+    if(!timestamp_ns) {
+        last_error = std::string(function_name) + ": null timestamp output";
+        return false;
+    }
+    try {
+        auto message = static_cast<std::shared_ptr<Message>*>(handle);
+        if(!message->get()) {
+            last_error = std::string(function_name) + ": invalid message";
+            return false;
+        }
+        const auto timestamp = device_clock ? (*message)->getTimestampDevice() : (*message)->getTimestamp();
+        *timestamp_ns = _dai_time_point_to_nanoseconds(timestamp);
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string(function_name) + " failed: " + e.what();
+        return false;
+    }
+}
+
+template <typename Message>
+static bool _dai_set_timestamp_ns(void* handle, int64_t timestamp_ns, bool device_clock, const char* function_name) {
+    if(!handle) {
+        last_error = std::string(function_name) + ": null message";
+        return false;
+    }
+    try {
+        auto message = static_cast<std::shared_ptr<Message>*>(handle);
+        if(!message->get()) {
+            last_error = std::string(function_name) + ": invalid message";
+            return false;
+        }
+        const auto timestamp = std::chrono::steady_clock::time_point(
+            std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::nanoseconds(timestamp_ns)));
+        if(device_clock) {
+            (*message)->setTimestampDevice(timestamp);
+        } else {
+            (*message)->setTimestamp(timestamp);
+        }
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string(function_name) + " failed: " + e.what();
+        return false;
+    }
+}
+
+template <typename Message>
+static bool _dai_get_sequence_num(void* handle, int64_t* sequence_num, const char* function_name) {
+    if(!handle) {
+        last_error = std::string(function_name) + ": null message";
+        return false;
+    }
+    if(!sequence_num) {
+        last_error = std::string(function_name) + ": null sequence number output";
+        return false;
+    }
+    try {
+        auto message = static_cast<std::shared_ptr<Message>*>(handle);
+        if(!message->get()) {
+            last_error = std::string(function_name) + ": invalid message";
+            return false;
+        }
+        *sequence_num = (*message)->getSequenceNum();
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string(function_name) + " failed: " + e.what();
+        return false;
+    }
+}
+
+template <typename Message>
+static bool _dai_set_sequence_num(void* handle, int64_t sequence_num, const char* function_name) {
+    if(!handle) {
+        last_error = std::string(function_name) + ": null message";
+        return false;
+    }
+    try {
+        auto message = static_cast<std::shared_ptr<Message>*>(handle);
+        if(!message->get()) {
+            last_error = std::string(function_name) + ": invalid message";
+            return false;
+        }
+        (*message)->setSequenceNum(sequence_num);
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string(function_name) + " failed: " + e.what();
+        return false;
+    }
+}
+
+template <typename Message>
+static bool _dai_get_timestamp_system_ns(
+    void* handle,
+    int64_t* timestamp_ns,
+    bool* has_timestamp,
+    const char* function_name) {
+    if(!handle) {
+        last_error = std::string(function_name) + ": null message";
+        return false;
+    }
+    if(!timestamp_ns || !has_timestamp) {
+        last_error = std::string(function_name) + ": null timestamp output";
+        return false;
+    }
+    *has_timestamp = false;
+    try {
+        auto message = static_cast<std::shared_ptr<Message>*>(handle);
+        if(!message->get()) {
+            last_error = std::string(function_name) + ": invalid message";
+            return false;
+        }
+        if constexpr(_dai_has_timestamp_system<Message>::value) {
+            const auto timestamp = (*message)->getTimestampSystem();
+            if(timestamp.has_value()) {
+                *timestamp_ns = _dai_time_point_to_nanoseconds(timestamp.value());
+                *has_timestamp = true;
+            }
+            return true;
+        } else {
+            last_error = std::string(function_name) + ": system timestamps require DepthAI-Core v3.8.0 or newer";
+            return false;
+        }
+    } catch(const std::exception& e) {
+        last_error = std::string(function_name) + " failed: " + e.what();
+        return false;
+    }
+}
+
+template <typename Message>
+static bool _dai_set_timestamp_system_ns(
+    void* handle,
+    int64_t timestamp_ns,
+    bool has_timestamp,
+    const char* function_name) {
+    if(!handle) {
+        last_error = std::string(function_name) + ": null message";
+        return false;
+    }
+    try {
+        auto message = static_cast<std::shared_ptr<Message>*>(handle);
+        if(!message->get()) {
+            last_error = std::string(function_name) + ": invalid message";
+            return false;
+        }
+        if constexpr(_dai_has_set_timestamp_system<Message>::value) {
+            std::optional<std::chrono::system_clock::time_point> timestamp;
+            if(has_timestamp) {
+                timestamp = std::chrono::system_clock::time_point(
+                    std::chrono::duration_cast<std::chrono::system_clock::duration>(std::chrono::nanoseconds(timestamp_ns)));
+            }
+            (*message)->setTimestampSystem(timestamp);
+            return true;
+        } else {
+            last_error = std::string(function_name) + ": system timestamps require DepthAI-Core v3.8.0 or newer";
+            return false;
+        }
+    } catch(const std::exception& e) {
+        last_error = std::string(function_name) + " failed: " + e.what();
+        return false;
+    }
+}
+
+static bool _dai_camera_exposure_offset(int value, dai::CameraExposureOffset* offset, const char* function_name) {
+    if(!offset) {
+        last_error = std::string(function_name) + ": null exposure offset output";
+        return false;
+    }
+    switch(value) {
+        case 0:
+            *offset = dai::CameraExposureOffset::START;
+            return true;
+        case 1:
+            *offset = dai::CameraExposureOffset::MIDDLE;
+            return true;
+        case 2:
+            *offset = dai::CameraExposureOffset::END;
+            return true;
+        default:
+            last_error = std::string(function_name) + ": invalid camera exposure offset";
+            return false;
+    }
+}
+
+static bool _dai_get_frame_timestamp_with_offset_ns(
+    void* handle,
+    int exposure_offset,
+    int64_t* timestamp_ns,
+    bool device_clock,
+    const char* function_name) {
+    if(!handle) {
+        last_error = std::string(function_name) + ": null frame";
+        return false;
+    }
+    if(!timestamp_ns) {
+        last_error = std::string(function_name) + ": null timestamp output";
+        return false;
+    }
+    dai::CameraExposureOffset offset = dai::CameraExposureOffset::START;
+    if(!_dai_camera_exposure_offset(exposure_offset, &offset, function_name)) {
+        return false;
+    }
+    try {
+        auto frame = static_cast<std::shared_ptr<dai::ImgFrame>*>(handle);
+        if(!frame->get()) {
+            last_error = std::string(function_name) + ": invalid frame";
+            return false;
+        }
+        const auto timestamp = device_clock ? (*frame)->getTimestampDevice(offset) : (*frame)->getTimestamp(offset);
+        *timestamp_ns = _dai_time_point_to_nanoseconds(timestamp);
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string(function_name) + " failed: " + e.what();
+        return false;
+    }
+}
+
+template <typename Frame>
+static bool _dai_get_frame_timestamp_system_with_offset_ns(
+    void* handle,
+    int exposure_offset,
+    int64_t* timestamp_ns,
+    bool* has_timestamp,
+    const char* function_name) {
+    if(!handle) {
+        last_error = std::string(function_name) + ": null frame";
+        return false;
+    }
+    if(!timestamp_ns || !has_timestamp) {
+        last_error = std::string(function_name) + ": null timestamp output";
+        return false;
+    }
+    *has_timestamp = false;
+    dai::CameraExposureOffset offset = dai::CameraExposureOffset::START;
+    if(!_dai_camera_exposure_offset(exposure_offset, &offset, function_name)) {
+        return false;
+    }
+    try {
+        auto frame = static_cast<std::shared_ptr<Frame>*>(handle);
+        if(!frame->get()) {
+            last_error = std::string(function_name) + ": invalid frame";
+            return false;
+        }
+        if constexpr(_dai_has_timestamp_system_with_offset<Frame>::value) {
+            const auto timestamp = (*frame)->getTimestampSystem(offset);
+            if(timestamp.has_value()) {
+                *timestamp_ns = _dai_time_point_to_nanoseconds(timestamp.value());
+                *has_timestamp = true;
+            }
+            return true;
+        } else {
+            last_error = std::string(function_name) + ": system timestamps require DepthAI-Core v3.8.0 or newer";
+            return false;
+        }
+    } catch(const std::exception& e) {
+        last_error = std::string(function_name) + " failed: " + e.what();
+        return false;
     }
 }
 
@@ -265,6 +559,15 @@ const char* dai_build_device_rvc3_version() {
 }
 const char* dai_build_device_rvc4_version() {
     return dai::build::DEVICE_RVC4_VERSION;
+}
+
+bool dai_clock_now_ns(int64_t* timestamp_ns) {
+    if(!timestamp_ns) {
+        last_error = "dai_clock_now_ns: null timestamp output";
+        return false;
+    }
+    *timestamp_ns = _dai_time_point_to_nanoseconds(dai::Clock::now());
+    return true;
 }
 
 // Basic string utilities
@@ -2833,6 +3136,68 @@ void dai_buffer_set_data(DaiBuffer buffer, const void* data, size_t len) {
     }
 }
 
+bool dai_buffer_get_timestamp_ns(DaiBuffer buffer, int64_t* timestamp_ns) {
+    return _dai_get_timestamp_ns<dai::Buffer>(
+        buffer,
+        timestamp_ns,
+        false,
+        "dai_buffer_get_timestamp_ns");
+}
+
+bool dai_buffer_get_timestamp_device_ns(DaiBuffer buffer, int64_t* timestamp_ns) {
+    return _dai_get_timestamp_ns<dai::Buffer>(
+        buffer,
+        timestamp_ns,
+        true,
+        "dai_buffer_get_timestamp_device_ns");
+}
+
+bool dai_buffer_get_timestamp_system_ns(DaiBuffer buffer, int64_t* timestamp_ns, bool* has_timestamp) {
+    return _dai_get_timestamp_system_ns<dai::Buffer>(
+        buffer,
+        timestamp_ns,
+        has_timestamp,
+        "dai_buffer_get_timestamp_system_ns");
+}
+
+bool dai_buffer_set_timestamp_ns(DaiBuffer buffer, int64_t timestamp_ns) {
+    return _dai_set_timestamp_ns<dai::Buffer>(
+        buffer,
+        timestamp_ns,
+        false,
+        "dai_buffer_set_timestamp_ns");
+}
+
+bool dai_buffer_set_timestamp_device_ns(DaiBuffer buffer, int64_t timestamp_ns) {
+    return _dai_set_timestamp_ns<dai::Buffer>(
+        buffer,
+        timestamp_ns,
+        true,
+        "dai_buffer_set_timestamp_device_ns");
+}
+
+bool dai_buffer_set_timestamp_system_ns(DaiBuffer buffer, int64_t timestamp_ns, bool has_timestamp) {
+    return _dai_set_timestamp_system_ns<dai::Buffer>(
+        buffer,
+        timestamp_ns,
+        has_timestamp,
+        "dai_buffer_set_timestamp_system_ns");
+}
+
+bool dai_buffer_get_sequence_num(DaiBuffer buffer, int64_t* sequence_num) {
+    return _dai_get_sequence_num<dai::Buffer>(
+        buffer,
+        sequence_num,
+        "dai_buffer_get_sequence_num");
+}
+
+bool dai_buffer_set_sequence_num(DaiBuffer buffer, int64_t sequence_num) {
+    return _dai_set_sequence_num<dai::Buffer>(
+        buffer,
+        sequence_num,
+        "dai_buffer_set_sequence_num");
+}
+
 DaiBuffer dai_input_get_buffer(DaiInput input) {
     if(!input) {
         last_error = "dai_input_get_buffer: null input";
@@ -4523,6 +4888,175 @@ size_t dai_frame_get_size(DaiImgFrame frame) {
     }
 }
 
+bool dai_frame_get_stride(DaiImgFrame frame, uint32_t* stride) {
+    if(!frame) {
+        last_error = "dai_frame_get_stride: null frame";
+        return false;
+    }
+    if(!stride) {
+        last_error = "dai_frame_get_stride: null stride output";
+        return false;
+    }
+    try {
+        auto sharedFrame = static_cast<std::shared_ptr<dai::ImgFrame>*>(frame);
+        if(!sharedFrame->get()) {
+            last_error = "dai_frame_get_stride: invalid frame";
+            return false;
+        }
+        *stride = (*sharedFrame)->getStride();
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_frame_get_stride failed: ") + e.what();
+        return false;
+    }
+}
+
+bool dai_frame_get_plane_stride(DaiImgFrame frame, uint32_t plane_index, uint32_t* plane_stride) {
+    if(!frame) {
+        last_error = "dai_frame_get_plane_stride: null frame";
+        return false;
+    }
+    if(!plane_stride) {
+        last_error = "dai_frame_get_plane_stride: null plane stride output";
+        return false;
+    }
+    if(plane_index > 1) {
+        last_error = "dai_frame_get_plane_stride: plane index must be 0 or 1";
+        return false;
+    }
+    try {
+        auto sharedFrame = static_cast<std::shared_ptr<dai::ImgFrame>*>(frame);
+        if(!sharedFrame->get()) {
+            last_error = "dai_frame_get_plane_stride: invalid frame";
+            return false;
+        }
+        *plane_stride = (*sharedFrame)->getPlaneStride(static_cast<int>(plane_index));
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_frame_get_plane_stride failed: ") + e.what();
+        return false;
+    }
+}
+
+bool dai_frame_get_plane_height(DaiImgFrame frame, uint32_t* plane_height) {
+    if(!frame) {
+        last_error = "dai_frame_get_plane_height: null frame";
+        return false;
+    }
+    if(!plane_height) {
+        last_error = "dai_frame_get_plane_height: null plane height output";
+        return false;
+    }
+    try {
+        auto sharedFrame = static_cast<std::shared_ptr<dai::ImgFrame>*>(frame);
+        if(!sharedFrame->get()) {
+            last_error = "dai_frame_get_plane_height: invalid frame";
+            return false;
+        }
+        *plane_height = (*sharedFrame)->getPlaneHeight();
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_frame_get_plane_height failed: ") + e.what();
+        return false;
+    }
+}
+
+bool dai_frame_get_timestamp_ns(DaiImgFrame frame, int64_t* timestamp_ns) {
+    return _dai_get_timestamp_ns<dai::ImgFrame>(
+        frame,
+        timestamp_ns,
+        false,
+        "dai_frame_get_timestamp_ns");
+}
+
+bool dai_frame_get_timestamp_device_ns(DaiImgFrame frame, int64_t* timestamp_ns) {
+    return _dai_get_timestamp_ns<dai::ImgFrame>(
+        frame,
+        timestamp_ns,
+        true,
+        "dai_frame_get_timestamp_device_ns");
+}
+
+bool dai_frame_get_timestamp_system_ns(DaiImgFrame frame, int64_t* timestamp_ns, bool* has_timestamp) {
+    return _dai_get_timestamp_system_ns<dai::ImgFrame>(
+        frame,
+        timestamp_ns,
+        has_timestamp,
+        "dai_frame_get_timestamp_system_ns");
+}
+
+bool dai_frame_get_timestamp_with_offset_ns(DaiImgFrame frame, int exposure_offset, int64_t* timestamp_ns) {
+    return _dai_get_frame_timestamp_with_offset_ns(
+        frame,
+        exposure_offset,
+        timestamp_ns,
+        false,
+        "dai_frame_get_timestamp_with_offset_ns");
+}
+
+bool dai_frame_get_timestamp_device_with_offset_ns(
+    DaiImgFrame frame,
+    int exposure_offset,
+    int64_t* timestamp_ns) {
+    return _dai_get_frame_timestamp_with_offset_ns(
+        frame,
+        exposure_offset,
+        timestamp_ns,
+        true,
+        "dai_frame_get_timestamp_device_with_offset_ns");
+}
+
+bool dai_frame_get_timestamp_system_with_offset_ns(
+    DaiImgFrame frame,
+    int exposure_offset,
+    int64_t* timestamp_ns,
+    bool* has_timestamp) {
+    return _dai_get_frame_timestamp_system_with_offset_ns<dai::ImgFrame>(
+        frame,
+        exposure_offset,
+        timestamp_ns,
+        has_timestamp,
+        "dai_frame_get_timestamp_system_with_offset_ns");
+}
+
+bool dai_frame_set_timestamp_ns(DaiImgFrame frame, int64_t timestamp_ns) {
+    return _dai_set_timestamp_ns<dai::ImgFrame>(
+        frame,
+        timestamp_ns,
+        false,
+        "dai_frame_set_timestamp_ns");
+}
+
+bool dai_frame_set_timestamp_device_ns(DaiImgFrame frame, int64_t timestamp_ns) {
+    return _dai_set_timestamp_ns<dai::ImgFrame>(
+        frame,
+        timestamp_ns,
+        true,
+        "dai_frame_set_timestamp_device_ns");
+}
+
+bool dai_frame_set_timestamp_system_ns(DaiImgFrame frame, int64_t timestamp_ns, bool has_timestamp) {
+    return _dai_set_timestamp_system_ns<dai::ImgFrame>(
+        frame,
+        timestamp_ns,
+        has_timestamp,
+        "dai_frame_set_timestamp_system_ns");
+}
+
+bool dai_frame_get_sequence_num(DaiImgFrame frame, int64_t* sequence_num) {
+    return _dai_get_sequence_num<dai::ImgFrame>(
+        frame,
+        sequence_num,
+        "dai_frame_get_sequence_num");
+}
+
+bool dai_frame_set_sequence_num(DaiImgFrame frame, int64_t sequence_num) {
+    return _dai_set_sequence_num<dai::ImgFrame>(
+        frame,
+        sequence_num,
+        "dai_frame_set_sequence_num");
+}
+
 void dai_frame_release(DaiImgFrame frame) {
     if(frame) {
         auto ptr = static_cast<std::shared_ptr<dai::ImgFrame>*>(frame);
@@ -4732,6 +5266,74 @@ int dai_encoded_frame_get_instance_num(DaiEncodedFrame frame) {
         last_error = std::string("dai_encoded_frame_get_instance_num failed: ") + e.what();
         return 0;
     }
+}
+
+bool dai_encoded_frame_get_timestamp_ns(DaiEncodedFrame frame, int64_t* timestamp_ns) {
+    return _dai_get_timestamp_ns<dai::EncodedFrame>(
+        frame,
+        timestamp_ns,
+        false,
+        "dai_encoded_frame_get_timestamp_ns");
+}
+
+bool dai_encoded_frame_get_timestamp_device_ns(DaiEncodedFrame frame, int64_t* timestamp_ns) {
+    return _dai_get_timestamp_ns<dai::EncodedFrame>(
+        frame,
+        timestamp_ns,
+        true,
+        "dai_encoded_frame_get_timestamp_device_ns");
+}
+
+bool dai_encoded_frame_get_timestamp_system_ns(
+    DaiEncodedFrame frame,
+    int64_t* timestamp_ns,
+    bool* has_timestamp) {
+    return _dai_get_timestamp_system_ns<dai::EncodedFrame>(
+        frame,
+        timestamp_ns,
+        has_timestamp,
+        "dai_encoded_frame_get_timestamp_system_ns");
+}
+
+bool dai_encoded_frame_set_timestamp_ns(DaiEncodedFrame frame, int64_t timestamp_ns) {
+    return _dai_set_timestamp_ns<dai::EncodedFrame>(
+        frame,
+        timestamp_ns,
+        false,
+        "dai_encoded_frame_set_timestamp_ns");
+}
+
+bool dai_encoded_frame_set_timestamp_device_ns(DaiEncodedFrame frame, int64_t timestamp_ns) {
+    return _dai_set_timestamp_ns<dai::EncodedFrame>(
+        frame,
+        timestamp_ns,
+        true,
+        "dai_encoded_frame_set_timestamp_device_ns");
+}
+
+bool dai_encoded_frame_set_timestamp_system_ns(
+    DaiEncodedFrame frame,
+    int64_t timestamp_ns,
+    bool has_timestamp) {
+    return _dai_set_timestamp_system_ns<dai::EncodedFrame>(
+        frame,
+        timestamp_ns,
+        has_timestamp,
+        "dai_encoded_frame_set_timestamp_system_ns");
+}
+
+bool dai_encoded_frame_get_sequence_num(DaiEncodedFrame frame, int64_t* sequence_num) {
+    return _dai_get_sequence_num<dai::EncodedFrame>(
+        frame,
+        sequence_num,
+        "dai_encoded_frame_get_sequence_num");
+}
+
+bool dai_encoded_frame_set_sequence_num(DaiEncodedFrame frame, int64_t sequence_num) {
+    return _dai_set_sequence_num<dai::EncodedFrame>(
+        frame,
+        sequence_num,
+        "dai_encoded_frame_set_sequence_num");
 }
 
 void dai_encoded_frame_release(DaiEncodedFrame frame) {

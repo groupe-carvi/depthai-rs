@@ -1,5 +1,31 @@
 use std::fmt;
 
+/// Selects the point within a camera exposure represented by an image timestamp.
+///
+/// Mirrors `dai::CameraExposureOffset`.
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CameraExposureOffset {
+    Start = 0,
+    Middle = 1,
+    End = 2,
+}
+
+impl CameraExposureOffset {
+    pub const fn as_raw(self) -> i32 {
+        self as i32
+    }
+
+    pub const fn from_raw(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Start),
+            1 => Some(Self::Middle),
+            2 => Some(Self::End),
+            _ => None,
+        }
+    }
+}
+
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageFrameType {

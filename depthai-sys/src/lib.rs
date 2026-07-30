@@ -22,6 +22,7 @@ include_cpp! {
     generate!("dai::dai_build_bootloader_version")
     generate!("dai::dai_build_device_rvc3_version")
     generate!("dai::dai_build_device_rvc4_version")
+    generate!("dai::dai_clock_now_ns")
 
     // Device functions
     generate!("dai::dai_device_new")
@@ -271,6 +272,20 @@ include_cpp! {
     generate!("dai::dai_frame_get_height")
     generate!("dai::dai_frame_get_type")
     generate!("dai::dai_frame_get_size")
+    generate!("dai::dai_frame_get_stride")
+    generate!("dai::dai_frame_get_plane_stride")
+    generate!("dai::dai_frame_get_plane_height")
+    generate!("dai::dai_frame_get_timestamp_ns")
+    generate!("dai::dai_frame_get_timestamp_device_ns")
+    generate!("dai::dai_frame_get_timestamp_system_ns")
+    generate!("dai::dai_frame_get_timestamp_with_offset_ns")
+    generate!("dai::dai_frame_get_timestamp_device_with_offset_ns")
+    generate!("dai::dai_frame_get_timestamp_system_with_offset_ns")
+    generate!("dai::dai_frame_set_timestamp_ns")
+    generate!("dai::dai_frame_set_timestamp_device_ns")
+    generate!("dai::dai_frame_set_timestamp_system_ns")
+    generate!("dai::dai_frame_get_sequence_num")
+    generate!("dai::dai_frame_set_sequence_num")
     generate!("dai::dai_frame_release")
 
     // EncodedFrame accessors
@@ -286,6 +301,14 @@ include_cpp! {
     generate!("dai::dai_encoded_frame_get_bitrate")
     generate!("dai::dai_encoded_frame_get_lossless")
     generate!("dai::dai_encoded_frame_get_instance_num")
+    generate!("dai::dai_encoded_frame_get_timestamp_ns")
+    generate!("dai::dai_encoded_frame_get_timestamp_device_ns")
+    generate!("dai::dai_encoded_frame_get_timestamp_system_ns")
+    generate!("dai::dai_encoded_frame_set_timestamp_ns")
+    generate!("dai::dai_encoded_frame_set_timestamp_device_ns")
+    generate!("dai::dai_encoded_frame_set_timestamp_system_ns")
+    generate!("dai::dai_encoded_frame_get_sequence_num")
+    generate!("dai::dai_encoded_frame_set_sequence_num")
     generate!("dai::dai_encoded_frame_release")
 
     // PointCloudData accessors
@@ -326,6 +349,14 @@ include_cpp! {
     generate!("dai::dai_buffer_new")
     generate!("dai::dai_buffer_release")
     generate!("dai::dai_buffer_set_data")
+    generate!("dai::dai_buffer_get_timestamp_ns")
+    generate!("dai::dai_buffer_get_timestamp_device_ns")
+    generate!("dai::dai_buffer_get_timestamp_system_ns")
+    generate!("dai::dai_buffer_set_timestamp_ns")
+    generate!("dai::dai_buffer_set_timestamp_device_ns")
+    generate!("dai::dai_buffer_set_timestamp_system_ns")
+    generate!("dai::dai_buffer_get_sequence_num")
+    generate!("dai::dai_buffer_set_sequence_num")
 
     // Utilities
     generate!("dai::dai_camera_socket_name")

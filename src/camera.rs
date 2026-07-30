@@ -1,14 +1,21 @@
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use autocxx::c_int;
 use depthai_sys::{depthai, DaiCameraNode, DaiDataQueue, DaiImgFrame, DaiNode};
 
-pub use crate::common::{CameraBoardSocket, CameraImageOrientation, CameraSensorType, ImageFrameType, ResizeMode};
+pub use crate::common::{
+    CameraBoardSocket, CameraExposureOffset, CameraImageOrientation, CameraSensorType,
+    ImageFrameType, ResizeMode,
+};
 use crate::error::{Result, clear_error_flag, last_error, take_error_if_any};
 use crate::pipeline::device_node::CreateInPipelineWith;
 use crate::pipeline::{Pipeline, PipelineInner};
 use crate::output::Output as NodeOutput;
+use crate::timestamp::{
+    DeviceTimestamp, HostTimestamp, read_monotonic_timestamp, read_system_timestamp,
+    write_monotonic_timestamp, write_system_timestamp,
+};
 
 #[crate::native_node_wrapper(
     native = "dai::node::Camera",
@@ -494,6 +501,215 @@ impl ImageFrame {
         self.handle
     }
 
+    /// Borrows the frame data without copying.
+    ///
+    /// The slice is valid while this frame remains borrowed and must not outlive
+    /// the frame.
+    pub fn as_bytes(&self) -> Result<&[u8]> {
+        clear_error_flag();
+        let len: usize = unsafe { depthai::dai_frame_get_size(self.handle) }.into();
+        if let Some(error) = take_error_if_any("failed to get image frame data length") {
+            return Err(error);
+        }
+        if len == 0 {
+            return Ok(&[]);
+        }
+
+        let data = unsafe { depthai::dai_frame_get_data(self.handle) };
+        if let Some(error) = take_error_if_any("failed to get image frame data") {
+            return Err(error);
+        }
+        if data.is_null() {
+            return Err(last_error("image frame data pointer was null"));
+        }
+
+        Ok(unsafe { std::slice::from_raw_parts(data as *const u8, len) })
+    }
+
+    /// Returns the image line stride in bytes.
+    pub fn stride(&self) -> Result<u32> {
+        clear_error_flag();
+        let mut stride = 0_u32;
+        let ok = unsafe { depthai::dai_frame_get_stride(self.handle, &mut stride) };
+        if ok {
+            Ok(stride)
+        } else {
+            Err(last_error("failed to get image frame stride"))
+        }
+    }
+
+    /// Returns the byte offset from `plane_index` to the following image plane.
+    ///
+    /// DepthAI-Core accepts plane indices 0 and 1.
+    pub fn plane_stride(&self, plane_index: u32) -> Result<u32> {
+        clear_error_flag();
+        let mut plane_stride = 0_u32;
+        let ok = unsafe {
+            depthai::dai_frame_get_plane_stride(self.handle, plane_index, &mut plane_stride)
+        };
+        if ok {
+            Ok(plane_stride)
+        } else {
+            Err(last_error("failed to get image frame plane stride"))
+        }
+    }
+
+    /// Returns the image plane height in lines.
+    pub fn plane_height(&self) -> Result<u32> {
+        clear_error_flag();
+        let mut plane_height = 0_u32;
+        let ok = unsafe { depthai::dai_frame_get_plane_height(self.handle, &mut plane_height) };
+        if ok {
+            Ok(plane_height)
+        } else {
+            Err(last_error("failed to get image frame plane height"))
+        }
+    }
+
+    /// Returns the frame sequence number.
+    pub fn sequence_num(&self) -> Result<i64> {
+        clear_error_flag();
+        let mut sequence_num = 0_i64;
+        let ok = unsafe { depthai::dai_frame_get_sequence_num(self.handle, &mut sequence_num) };
+        if ok {
+            Ok(sequence_num)
+        } else {
+            Err(last_error("failed to get image frame sequence number"))
+        }
+    }
+
+    /// Sets the frame sequence number.
+    pub fn set_sequence_num(&mut self, sequence_num: i64) -> Result<()> {
+        clear_error_flag();
+        if unsafe { depthai::dai_frame_set_sequence_num(self.handle, sequence_num) } {
+            Ok(())
+        } else {
+            Err(last_error("failed to set image frame sequence number"))
+        }
+    }
+
+    /// Returns the frame timestamp synchronized to the host monotonic clock.
+    pub fn timestamp(&self) -> Result<HostTimestamp> {
+        read_monotonic_timestamp(
+            "failed to get image frame timestamp",
+            |timestamp_ns| unsafe {
+                depthai::dai_frame_get_timestamp_ns(self.handle, timestamp_ns)
+            },
+        )
+    }
+
+    /// Returns the frame timestamp captured from the device monotonic clock.
+    ///
+    /// This clock is not synchronized to the host clock.
+    pub fn timestamp_device(&self) -> Result<DeviceTimestamp> {
+        read_monotonic_timestamp(
+            "failed to get image frame device timestamp",
+            |timestamp_ns| unsafe {
+                depthai::dai_frame_get_timestamp_device_ns(self.handle, timestamp_ns)
+            },
+        )
+    }
+
+    /// Returns the optional device system-clock timestamp.
+    ///
+    /// The value may be PTP-synchronized. DepthAI-Core versions before v3.8.0
+    /// return an unsupported-operation error.
+    pub fn timestamp_system(&self) -> Result<Option<SystemTime>> {
+        read_system_timestamp(
+            "failed to get image frame system timestamp",
+            |timestamp_ns, has_timestamp| unsafe {
+                depthai::dai_frame_get_timestamp_system_ns(self.handle, timestamp_ns, has_timestamp)
+            },
+        )
+    }
+
+    /// Returns the host-synchronized timestamp at a selected exposure offset.
+    pub fn timestamp_with_offset(&self, offset: CameraExposureOffset) -> Result<HostTimestamp> {
+        read_monotonic_timestamp(
+            "failed to get image frame timestamp at exposure offset",
+            |timestamp_ns| unsafe {
+                depthai::dai_frame_get_timestamp_with_offset_ns(
+                    self.handle,
+                    c_int(offset.as_raw()),
+                    timestamp_ns,
+                )
+            },
+        )
+    }
+
+    /// Returns the device-monotonic timestamp at a selected exposure offset.
+    pub fn timestamp_device_with_offset(
+        &self,
+        offset: CameraExposureOffset,
+    ) -> Result<DeviceTimestamp> {
+        read_monotonic_timestamp(
+            "failed to get image frame device timestamp at exposure offset",
+            |timestamp_ns| unsafe {
+                depthai::dai_frame_get_timestamp_device_with_offset_ns(
+                    self.handle,
+                    c_int(offset.as_raw()),
+                    timestamp_ns,
+                )
+            },
+        )
+    }
+
+    /// Returns the optional device system-clock timestamp at a selected exposure offset.
+    ///
+    /// The value may be PTP-synchronized. DepthAI-Core versions before v3.8.0
+    /// return an unsupported-operation error.
+    pub fn timestamp_system_with_offset(
+        &self,
+        offset: CameraExposureOffset,
+    ) -> Result<Option<SystemTime>> {
+        read_system_timestamp(
+            "failed to get image frame system timestamp at exposure offset",
+            |timestamp_ns, has_timestamp| unsafe {
+                depthai::dai_frame_get_timestamp_system_with_offset_ns(
+                    self.handle,
+                    c_int(offset.as_raw()),
+                    timestamp_ns,
+                    has_timestamp,
+                )
+            },
+        )
+    }
+
+    /// Sets the timestamp synchronized to the host monotonic clock.
+    pub fn set_timestamp(&mut self, timestamp: HostTimestamp) -> Result<()> {
+        write_monotonic_timestamp(
+            "failed to set image frame timestamp",
+            timestamp,
+            |timestamp_ns| unsafe {
+                depthai::dai_frame_set_timestamp_ns(self.handle, timestamp_ns)
+            },
+        )
+    }
+
+    /// Sets the timestamp in the device monotonic clock domain.
+    pub fn set_timestamp_device(&mut self, timestamp: DeviceTimestamp) -> Result<()> {
+        write_monotonic_timestamp(
+            "failed to set image frame device timestamp",
+            timestamp,
+            |timestamp_ns| unsafe {
+                depthai::dai_frame_set_timestamp_device_ns(self.handle, timestamp_ns)
+            },
+        )
+    }
+
+    /// Sets or clears the device system-clock timestamp.
+    ///
+    /// DepthAI-Core versions before v3.8.0 return an unsupported-operation error.
+    pub fn set_timestamp_system(&mut self, timestamp: Option<SystemTime>) -> Result<()> {
+        write_system_timestamp(
+            "failed to set image frame system timestamp",
+            timestamp,
+            |timestamp_ns, has_timestamp| unsafe {
+                depthai::dai_frame_set_timestamp_system_ns(self.handle, timestamp_ns, has_timestamp)
+            },
+        )
+    }
+
     pub fn width(&self) -> u32 {
         let raw: ::std::os::raw::c_int = unsafe { depthai::dai_frame_get_width(self.handle) }.into();
         raw as u32
@@ -515,15 +731,7 @@ impl ImageFrame {
     }
 
     pub fn bytes(&self) -> Vec<u8> {
-        let len = self.byte_len();
-        if len == 0 {
-            return Vec::new();
-        }
-        let data_ptr = unsafe { depthai::dai_frame_get_data(self.handle) };
-        if data_ptr.is_null() {
-            return Vec::new();
-        }
-        unsafe { std::slice::from_raw_parts(data_ptr as *const u8, len).to_vec() }
+        self.as_bytes().map(<[u8]>::to_vec).unwrap_or_default()
     }
 
     pub fn describe(&self) -> String {

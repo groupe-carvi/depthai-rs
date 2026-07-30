@@ -34,6 +34,7 @@ API const char* dai_build_device_version();
 API const char* dai_build_bootloader_version();
 API const char* dai_build_device_rvc3_version();
 API const char* dai_build_device_rvc4_version();
+API bool dai_clock_now_ns(int64_t* timestamp_ns);
 
 // Helper to duplicate/free returned strings (caller must free)
 API char* dai_string_to_cstring(const char* str);
@@ -431,6 +432,14 @@ API DaiImgFrame dai_message_group_get_img_frame(DaiMessageGroup group, const cha
 API DaiBuffer dai_buffer_new(size_t size);
 API void dai_buffer_release(DaiBuffer buffer);
 API void dai_buffer_set_data(DaiBuffer buffer, const void* data, size_t len);
+API bool dai_buffer_get_timestamp_ns(DaiBuffer buffer, int64_t* timestamp_ns);
+API bool dai_buffer_get_timestamp_device_ns(DaiBuffer buffer, int64_t* timestamp_ns);
+API bool dai_buffer_get_timestamp_system_ns(DaiBuffer buffer, int64_t* timestamp_ns, bool* has_timestamp);
+API bool dai_buffer_set_timestamp_ns(DaiBuffer buffer, int64_t timestamp_ns);
+API bool dai_buffer_set_timestamp_device_ns(DaiBuffer buffer, int64_t timestamp_ns);
+API bool dai_buffer_set_timestamp_system_ns(DaiBuffer buffer, int64_t timestamp_ns, bool has_timestamp);
+API bool dai_buffer_get_sequence_num(DaiBuffer buffer, int64_t* sequence_num);
+API bool dai_buffer_set_sequence_num(DaiBuffer buffer, int64_t sequence_num);
 
 // Low-level frame operations
 API void* dai_frame_get_data(DaiImgFrame frame);
@@ -438,6 +447,24 @@ API int dai_frame_get_width(DaiImgFrame frame);
 API int dai_frame_get_height(DaiImgFrame frame);
 API int dai_frame_get_type(DaiImgFrame frame);
 API size_t dai_frame_get_size(DaiImgFrame frame);
+API bool dai_frame_get_stride(DaiImgFrame frame, uint32_t* stride);
+API bool dai_frame_get_plane_stride(DaiImgFrame frame, uint32_t plane_index, uint32_t* plane_stride);
+API bool dai_frame_get_plane_height(DaiImgFrame frame, uint32_t* plane_height);
+API bool dai_frame_get_timestamp_ns(DaiImgFrame frame, int64_t* timestamp_ns);
+API bool dai_frame_get_timestamp_device_ns(DaiImgFrame frame, int64_t* timestamp_ns);
+API bool dai_frame_get_timestamp_system_ns(DaiImgFrame frame, int64_t* timestamp_ns, bool* has_timestamp);
+API bool dai_frame_get_timestamp_with_offset_ns(DaiImgFrame frame, int exposure_offset, int64_t* timestamp_ns);
+API bool dai_frame_get_timestamp_device_with_offset_ns(DaiImgFrame frame, int exposure_offset, int64_t* timestamp_ns);
+API bool dai_frame_get_timestamp_system_with_offset_ns(
+    DaiImgFrame frame,
+    int exposure_offset,
+    int64_t* timestamp_ns,
+    bool* has_timestamp);
+API bool dai_frame_set_timestamp_ns(DaiImgFrame frame, int64_t timestamp_ns);
+API bool dai_frame_set_timestamp_device_ns(DaiImgFrame frame, int64_t timestamp_ns);
+API bool dai_frame_set_timestamp_system_ns(DaiImgFrame frame, int64_t timestamp_ns, bool has_timestamp);
+API bool dai_frame_get_sequence_num(DaiImgFrame frame, int64_t* sequence_num);
+API bool dai_frame_set_sequence_num(DaiImgFrame frame, int64_t sequence_num);
 API void dai_frame_release(DaiImgFrame frame);
 
 // EncodedFrame accessors
@@ -453,6 +480,20 @@ API int dai_encoded_frame_get_quality(DaiEncodedFrame frame);
 API int dai_encoded_frame_get_bitrate(DaiEncodedFrame frame);
 API bool dai_encoded_frame_get_lossless(DaiEncodedFrame frame);
 API int dai_encoded_frame_get_instance_num(DaiEncodedFrame frame);
+API bool dai_encoded_frame_get_timestamp_ns(DaiEncodedFrame frame, int64_t* timestamp_ns);
+API bool dai_encoded_frame_get_timestamp_device_ns(DaiEncodedFrame frame, int64_t* timestamp_ns);
+API bool dai_encoded_frame_get_timestamp_system_ns(
+    DaiEncodedFrame frame,
+    int64_t* timestamp_ns,
+    bool* has_timestamp);
+API bool dai_encoded_frame_set_timestamp_ns(DaiEncodedFrame frame, int64_t timestamp_ns);
+API bool dai_encoded_frame_set_timestamp_device_ns(DaiEncodedFrame frame, int64_t timestamp_ns);
+API bool dai_encoded_frame_set_timestamp_system_ns(
+    DaiEncodedFrame frame,
+    int64_t timestamp_ns,
+    bool has_timestamp);
+API bool dai_encoded_frame_get_sequence_num(DaiEncodedFrame frame, int64_t* sequence_num);
+API bool dai_encoded_frame_set_sequence_num(DaiEncodedFrame frame, int64_t sequence_num);
 API void dai_encoded_frame_release(DaiEncodedFrame frame);
 
 // Low-level utility functions

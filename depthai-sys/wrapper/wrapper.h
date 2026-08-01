@@ -63,6 +63,7 @@ typedef void* DaiRGBDData;    // currently: `std::shared_ptr<dai::RGBDData>*`
 typedef void* DaiMessageGroup; // currently: `std::shared_ptr<dai::MessageGroup>*`
 typedef void* DaiBuffer;       // currently: `std::shared_ptr<dai::Buffer>*`
 typedef void* DaiInputQueue;   // currently: `std::shared_ptr<dai::InputQueue>*`
+typedef void* DaiNNData;       // currently: `std::shared_ptr<dai::NNData>*`
 
 // Opaque handle to a heap-allocated array of `DaiDatatype` handles.
 //
@@ -317,6 +318,36 @@ API float dai_video_encoder_get_frame_rate(DaiNode encoder);
 API void dai_video_encoder_set_max_output_frame_size(DaiNode encoder, int max_frame_size);
 API int dai_video_encoder_get_max_output_frame_size(DaiNode encoder);
 
+// NNData helpers
+API DaiNNData dai_nn_data_new();
+API DaiNNData dai_nn_data_clone(DaiNNData nn_data);
+API void dai_nn_data_release(DaiNNData nn_data);
+API DaiBuffer dai_nn_data_as_buffer(DaiNNData nn_data);
+API bool dai_nn_data_add_tensor(DaiNNData nn_data,
+                                const char* name,
+                                const uint8_t* bytes,
+                                size_t bytes_len,
+                                int data_type,
+                                int storage_order,
+                                const uint32_t* dimensions,
+                                size_t dimensions_len,
+                                const uint32_t* strides,
+                                size_t strides_len,
+                                bool quantized,
+                                float quantization_scale,
+                                float quantization_zero_point);
+// Returned JSON is either one tensor object or an array of tensor objects.
+// Caller must free with dai_free_cstring().
+API char* dai_nn_data_get_tensor_info_json(DaiNNData nn_data, const char* name);
+API char* dai_nn_data_get_all_tensor_info_json(DaiNNData nn_data);
+API size_t dai_nn_data_get_tensor_data_size(DaiNNData nn_data, const char* name);
+API bool dai_nn_data_copy_tensor_data(DaiNNData nn_data,
+                                      const char* name,
+                                      uint8_t* destination,
+                                      size_t destination_len);
+API void dai_nn_data_set_batch_size(DaiNNData nn_data, uint32_t batch_size);
+API uint32_t dai_nn_data_get_batch_size(DaiNNData nn_data);
+
 // ImageManipConfig helpers
 // Returned handle is a `std::shared_ptr<dai::Buffer>*` actually pointing to a `dai::ImageManipConfig`.
 API DaiBuffer dai_image_manip_config_new();
@@ -437,6 +468,7 @@ API DaiEncodedFrame dai_datatype_as_encoded_frame(DaiDatatype msg);
 API DaiPointCloud dai_datatype_as_pointcloud(DaiDatatype msg);
 API DaiRGBDData dai_datatype_as_rgbd(DaiDatatype msg);
 API DaiBuffer dai_datatype_as_buffer(DaiDatatype msg);
+API DaiNNData dai_datatype_as_nn_data(DaiDatatype msg);
 API DaiMessageGroup dai_datatype_as_message_group(DaiDatatype msg);
 API DaiDatatype dai_datatype_as_nndata(DaiDatatype msg);
 API size_t dai_datatype_array_len(DaiDatatypeArray arr);
@@ -465,10 +497,12 @@ API DaiImgFrame dai_input_try_get_img_frame(DaiInput input);
 API DaiInputQueue dai_input_create_input_queue(DaiInput input, unsigned int max_size, bool blocking);
 API void dai_input_queue_delete(DaiInputQueue queue);
 API void dai_input_queue_send(DaiInputQueue queue, DaiDatatype msg);
+API void dai_input_queue_send_nn_data(DaiInputQueue queue, DaiNNData nn_data);
 
 // Output send helpers (host node)
 API void dai_output_send_buffer(DaiOutput output, DaiBuffer buffer);
 API void dai_output_send_img_frame(DaiOutput output, DaiImgFrame frame);
+API void dai_output_send_nn_data(DaiOutput output, DaiNNData nn_data);
 
 // MessageGroup helpers
 API DaiMessageGroup dai_message_group_clone(DaiMessageGroup group);

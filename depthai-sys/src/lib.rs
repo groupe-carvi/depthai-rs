@@ -218,6 +218,19 @@ include_cpp! {
     generate!("dai::dai_video_encoder_set_max_output_frame_size")
     generate!("dai::dai_video_encoder_get_max_output_frame_size")
 
+    // NNData helpers
+    generate!("dai::dai_nn_data_new")
+    generate!("dai::dai_nn_data_clone")
+    generate!("dai::dai_nn_data_release")
+    generate!("dai::dai_nn_data_as_buffer")
+    generate!("dai::dai_nn_data_add_tensor")
+    generate!("dai::dai_nn_data_get_tensor_info_json")
+    generate!("dai::dai_nn_data_get_all_tensor_info_json")
+    generate!("dai::dai_nn_data_get_tensor_data_size")
+    generate!("dai::dai_nn_data_copy_tensor_data")
+    generate!("dai::dai_nn_data_set_batch_size")
+    generate!("dai::dai_nn_data_get_batch_size")
+
     // Camera functions
     generate!("dai::dai_camera_request_output")
     generate!("dai::dai_camera_request_full_resolution_output")
@@ -294,6 +307,7 @@ include_cpp! {
     generate!("dai::dai_datatype_as_pointcloud")
     generate!("dai::dai_datatype_as_rgbd")
     generate!("dai::dai_datatype_as_buffer")
+    generate!("dai::dai_datatype_as_nn_data")
     generate!("dai::dai_datatype_as_message_group")
     generate!("dai::dai_datatype_as_nndata")
     generate!("dai::dai_datatype_array_len")
@@ -366,10 +380,12 @@ include_cpp! {
     generate!("dai::dai_input_queue_delete")
     generate!("dai::dai_input_queue_send")
     generate!("dai::dai_input_queue_send_buffer")
+    generate!("dai::dai_input_queue_send_nn_data")
 
     // Output send helpers
     generate!("dai::dai_output_send_buffer")
     generate!("dai::dai_output_send_img_frame")
+    generate!("dai::dai_output_send_nn_data")
 
     // MessageGroup helpers
     generate!("dai::dai_message_group_clone")
@@ -466,6 +482,7 @@ pub type DaiRGBDData = *mut autocxx::c_void;
 pub type DaiMessageGroup = *mut autocxx::c_void;
 pub type DaiBuffer = *mut autocxx::c_void;
 pub type DaiInputQueue = *mut autocxx::c_void;
+pub type DaiNNData = *mut autocxx::c_void;
 
 pub mod string_utils;
 

@@ -541,6 +541,11 @@ pub use model_zoo::{
     NNModelDescription, ProgressFormat, SlugComponents, ZooFetchOptions, download_models_from_zoo,
     get_model_from_zoo,
 };
+pub use neural_network::{
+    NNData, NeuralNetworkNode, TensorDataType, TensorInfo, TensorQuantization, TensorSpec,
+    TensorStorageOrder,
+};
+pub use nn_archive::{ArchiveCompression, ModelType, NNArchive, NNArchiveOptions};
 pub use output::{Input, Output};
 pub use pointcloud::{Point3fRGBA, PointCloudData};
 pub use queue::{Datatype, DatatypeEnum, InputQueue, MessageQueue, QueueCallbackHandle};

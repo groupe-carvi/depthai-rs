@@ -43,11 +43,20 @@
     #else
         #define DAI_HAS_NODE_GATE 0
     #endif
+
+    #if __has_include(<depthai/pipeline/datatype/NNData.hpp>)
+        #include <depthai/pipeline/datatype/NNData.hpp>
+        #define DAI_HAS_NN_DATA 1
+    #else
+        #define DAI_HAS_NN_DATA 0
+    #endif
 #else
     #define DAI_HAS_NODE_RECTIFICATION 0
     #define DAI_HAS_NODE_NEURAL_DEPTH 0
     #define DAI_HAS_NODE_GATE 0
+    #define DAI_HAS_NN_DATA 0
 #endif
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -2677,6 +2686,490 @@ int dai_video_encoder_get_max_output_frame_size(DaiNode encoder) {
     }
 }
 
+#if DAI_HAS_NN_DATA
+static inline std::shared_ptr<dai::NNData>* _dai_as_nn_data(DaiNNData nn_data) {
+    return static_cast<std::shared_ptr<dai::NNData>*>(nn_data);
+}
+
+static bool _dai_nn_data_valid_tensor_data_type(int data_type) {
+    // U16F uses the stable wire discriminator 6, but depthai-core only added the
+    // named enum value in v3.7. Keep the C ABI stable while rejecting it on
+    // older Core versions without referring to a missing C++ enumerator.
+    if(data_type == 6) {
+        return dai::build::VERSION_MAJOR > 3
+               || (dai::build::VERSION_MAJOR == 3 && dai::build::VERSION_MINOR >= 7);
+    }
+    switch(static_cast<dai::TensorInfo::DataType>(data_type)) {
+        case dai::TensorInfo::DataType::FP16:
+        case dai::TensorInfo::DataType::U8F:
+        case dai::TensorInfo::DataType::INT:
+        case dai::TensorInfo::DataType::FP32:
+        case dai::TensorInfo::DataType::I8:
+        case dai::TensorInfo::DataType::FP64:
+            return true;
+    }
+    return false;
+}
+
+static bool _dai_valid_tensor_storage_order(int storage_order) {
+    switch(static_cast<dai::TensorInfo::StorageOrder>(storage_order)) {
+        case dai::TensorInfo::StorageOrder::NHWC:
+        case dai::TensorInfo::StorageOrder::NHCW:
+        case dai::TensorInfo::StorageOrder::NCHW:
+        case dai::TensorInfo::StorageOrder::HWC:
+        case dai::TensorInfo::StorageOrder::CHW:
+        case dai::TensorInfo::StorageOrder::WHC:
+        case dai::TensorInfo::StorageOrder::HCW:
+        case dai::TensorInfo::StorageOrder::WCH:
+        case dai::TensorInfo::StorageOrder::CWH:
+        case dai::TensorInfo::StorageOrder::NC:
+        case dai::TensorInfo::StorageOrder::CN:
+        case dai::TensorInfo::StorageOrder::C:
+        case dai::TensorInfo::StorageOrder::H:
+        case dai::TensorInfo::StorageOrder::W:
+            return true;
+    }
+    return false;
+}
+
+static size_t _dai_tensor_element_size(dai::TensorInfo::DataType data_type) {
+    if(static_cast<int>(data_type) == 6) {
+        return dai::build::VERSION_MAJOR > 3
+                       || (dai::build::VERSION_MAJOR == 3
+                           && dai::build::VERSION_MINOR >= 7)
+                   ? 2
+                   : 0;
+    }
+    switch(data_type) {
+        case dai::TensorInfo::DataType::FP64:
+            return 8;
+        case dai::TensorInfo::DataType::INT:
+        case dai::TensorInfo::DataType::FP32:
+            return 4;
+        case dai::TensorInfo::DataType::FP16:
+            return 2;
+        case dai::TensorInfo::DataType::U8F:
+        case dai::TensorInfo::DataType::I8:
+            return 1;
+    }
+    return 0;
+}
+
+static nlohmann::json _dai_tensor_info_json(const dai::TensorInfo& info) {
+    return nlohmann::json{
+        {"name", info.name},
+        {"dataType", static_cast<int>(info.dataType)},
+        {"storageOrder", static_cast<int>(info.order)},
+        {"numDimensions", info.numDimensions},
+        {"dimensions", info.dims},
+        {"strides", info.strides},
+        {"offset", info.offset},
+        {"byteLength", info.getTensorSize()},
+        {"quantized", info.quantization},
+        {"quantizationScale", info.qpScale},
+        {"quantizationZeroPoint", info.qpZp},
+    };
+}
+#endif
+
+DaiNNData dai_nn_data_new() {
+#if DAI_HAS_NN_DATA
+    try {
+        return static_cast<DaiNNData>(
+            new std::shared_ptr<dai::NNData>(std::make_shared<dai::NNData>()));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nn_data_new failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    last_error = "dai_nn_data_new: NNData is unavailable in this depthai-core version";
+    return nullptr;
+#endif
+}
+
+DaiNNData dai_nn_data_clone(DaiNNData nn_data) {
+#if DAI_HAS_NN_DATA
+    if(!nn_data) {
+        last_error = "dai_nn_data_clone: null NNData";
+        return nullptr;
+    }
+    try {
+        const auto ptr = _dai_as_nn_data(nn_data);
+        if(!ptr->get()) {
+            last_error = "dai_nn_data_clone: invalid NNData";
+            return nullptr;
+        }
+        return static_cast<DaiNNData>(new std::shared_ptr<dai::NNData>(*ptr));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nn_data_clone failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    (void)nn_data;
+    last_error = "dai_nn_data_clone: NNData is unavailable in this depthai-core version";
+    return nullptr;
+#endif
+}
+
+void dai_nn_data_release(DaiNNData nn_data) {
+#if DAI_HAS_NN_DATA
+    delete _dai_as_nn_data(nn_data);
+#else
+    (void)nn_data;
+#endif
+}
+
+DaiBuffer dai_nn_data_as_buffer(DaiNNData nn_data) {
+#if DAI_HAS_NN_DATA
+    if(!nn_data) {
+        last_error = "dai_nn_data_as_buffer: null NNData";
+        return nullptr;
+    }
+    try {
+        const auto ptr = _dai_as_nn_data(nn_data);
+        if(!ptr->get()) {
+            last_error = "dai_nn_data_as_buffer: invalid NNData";
+            return nullptr;
+        }
+        return static_cast<DaiBuffer>(new std::shared_ptr<dai::Buffer>(
+            std::static_pointer_cast<dai::Buffer>(*ptr)));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nn_data_as_buffer failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    (void)nn_data;
+    last_error = "dai_nn_data_as_buffer: NNData is unavailable in this depthai-core version";
+    return nullptr;
+#endif
+}
+
+bool dai_nn_data_add_tensor(DaiNNData nn_data,
+                            const char* name,
+                            const uint8_t* bytes,
+                            size_t bytes_len,
+                            int data_type,
+                            int storage_order,
+                            const uint32_t* dimensions,
+                            size_t dimensions_len,
+                            const uint32_t* strides,
+                            size_t strides_len,
+                            bool quantized,
+                            float quantization_scale,
+                            float quantization_zero_point) {
+#if DAI_HAS_NN_DATA
+    if(!nn_data || !name || !dimensions) {
+        last_error = "dai_nn_data_add_tensor: null NNData/name/dimensions";
+        return false;
+    }
+    if(bytes_len != 0 && !bytes) {
+        last_error = "dai_nn_data_add_tensor: null bytes with non-zero length";
+        return false;
+    }
+    if(dimensions_len == 0) {
+        last_error = "dai_nn_data_add_tensor: tensor dimensions must not be empty";
+        return false;
+    }
+    if(strides && strides_len != dimensions_len) {
+        last_error = "dai_nn_data_add_tensor: explicit strides must match dimensions";
+        return false;
+    }
+    if(!strides && strides_len != 0) {
+        last_error = "dai_nn_data_add_tensor: non-zero strides length with null strides";
+        return false;
+    }
+    if(!_dai_nn_data_valid_tensor_data_type(data_type)) {
+        last_error = "dai_nn_data_add_tensor: invalid tensor data type";
+        return false;
+    }
+    if(!_dai_valid_tensor_storage_order(storage_order)) {
+        last_error = "dai_nn_data_add_tensor: invalid tensor storage order";
+        return false;
+    }
+    try {
+        const auto ptr = _dai_as_nn_data(nn_data);
+        if(!ptr->get()) {
+            last_error = "dai_nn_data_add_tensor: invalid NNData";
+            return false;
+        }
+        if((*ptr)->hasLayer(name)) {
+            last_error = "dai_nn_data_add_tensor: tensor name already exists";
+            return false;
+        }
+
+        dai::TensorInfo info;
+        info.name = name;
+        info.dataType = static_cast<dai::TensorInfo::DataType>(data_type);
+        info.order = static_cast<dai::TensorInfo::StorageOrder>(storage_order);
+        info.numDimensions = static_cast<unsigned int>(dimensions_len);
+        info.dims.assign(dimensions, dimensions + dimensions_len);
+        info.quantization = quantized;
+        info.qpScale = quantization_scale;
+        info.qpZp = quantization_zero_point;
+
+        const auto element_size = _dai_tensor_element_size(info.dataType);
+        for(size_t index = 0; index < dimensions_len; ++index) {
+            if(dimensions[index] == 0) {
+                last_error = "dai_nn_data_add_tensor: tensor dimensions must be non-zero";
+                return false;
+            }
+        }
+
+        if(strides) {
+            if(std::none_of(strides,
+                            strides + strides_len,
+                            [](uint32_t stride) { return stride != 0; })) {
+                last_error = "dai_nn_data_add_tensor: explicit strides must contain a non-zero value";
+                return false;
+            }
+            info.strides.assign(strides, strides + strides_len);
+        } else {
+            info.strides.resize(dimensions_len);
+            size_t running_stride = element_size;
+            for(size_t reverse = dimensions_len; reverse > 0; --reverse) {
+                const size_t index = reverse - 1;
+                if(running_stride > std::numeric_limits<unsigned int>::max()) {
+                    last_error = "dai_nn_data_add_tensor: tensor stride exceeds uint32";
+                    return false;
+                }
+                info.strides[index] = static_cast<unsigned int>(running_stride);
+                if(index != 0) {
+                    if(running_stride >
+                       std::numeric_limits<size_t>::max() / dimensions[index]) {
+                        last_error = "dai_nn_data_add_tensor: tensor stride overflow";
+                        return false;
+                    }
+                    running_stride *= dimensions[index];
+                }
+            }
+        }
+
+        info.validateStorageOrder();
+        const auto expected_size = info.getTensorSize();
+        if(expected_size != bytes_len) {
+            last_error = "dai_nn_data_add_tensor: byte length does not match tensor shape/type/strides";
+            return false;
+        }
+        auto destination = (*ptr)->emplaceTensor(info);
+        if(destination.size() != bytes_len) {
+            last_error =
+                "dai_nn_data_add_tensor: DepthAI allocated an unexpected tensor byte length";
+            return false;
+        }
+        if(bytes_len != 0) {
+            std::memcpy(destination.data(), bytes, bytes_len);
+        }
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nn_data_add_tensor failed: ") + e.what();
+        return false;
+    }
+#else
+    (void)nn_data;
+    (void)name;
+    (void)bytes;
+    (void)bytes_len;
+    (void)data_type;
+    (void)storage_order;
+    (void)dimensions;
+    (void)dimensions_len;
+    (void)strides;
+    (void)strides_len;
+    (void)quantized;
+    (void)quantization_scale;
+    (void)quantization_zero_point;
+    last_error = "dai_nn_data_add_tensor: NNData is unavailable in this depthai-core version";
+    return false;
+#endif
+}
+
+char* dai_nn_data_get_tensor_info_json(DaiNNData nn_data, const char* name) {
+#if DAI_HAS_NN_DATA
+    if(!nn_data || !name) {
+        last_error = "dai_nn_data_get_tensor_info_json: null NNData/name";
+        return nullptr;
+    }
+    try {
+        const auto ptr = _dai_as_nn_data(nn_data);
+        if(!ptr->get()) {
+            last_error = "dai_nn_data_get_tensor_info_json: invalid NNData";
+            return nullptr;
+        }
+        const auto info = (*ptr)->getTensorInfo(name);
+        if(!info.has_value()) {
+            return dai_string_to_cstring("null");
+        }
+        return dai_string_to_cstring(_dai_tensor_info_json(*info).dump().c_str());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nn_data_get_tensor_info_json failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    (void)nn_data;
+    (void)name;
+    last_error =
+        "dai_nn_data_get_tensor_info_json: NNData is unavailable in this depthai-core version";
+    return nullptr;
+#endif
+}
+
+char* dai_nn_data_get_all_tensor_info_json(DaiNNData nn_data) {
+#if DAI_HAS_NN_DATA
+    if(!nn_data) {
+        last_error = "dai_nn_data_get_all_tensor_info_json: null NNData";
+        return nullptr;
+    }
+    try {
+        const auto ptr = _dai_as_nn_data(nn_data);
+        if(!ptr->get()) {
+            last_error = "dai_nn_data_get_all_tensor_info_json: invalid NNData";
+            return nullptr;
+        }
+        nlohmann::json result = nlohmann::json::array();
+        for(const auto& info : (*ptr)->getAllLayers()) {
+            result.push_back(_dai_tensor_info_json(info));
+        }
+        return dai_string_to_cstring(result.dump().c_str());
+    } catch(const std::exception& e) {
+        last_error =
+            std::string("dai_nn_data_get_all_tensor_info_json failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    (void)nn_data;
+    last_error =
+        "dai_nn_data_get_all_tensor_info_json: NNData is unavailable in this depthai-core version";
+    return nullptr;
+#endif
+}
+
+size_t dai_nn_data_get_tensor_data_size(DaiNNData nn_data, const char* name) {
+#if DAI_HAS_NN_DATA
+    if(!nn_data || !name) {
+        last_error = "dai_nn_data_get_tensor_data_size: null NNData/name";
+        return 0;
+    }
+    try {
+        const auto ptr = _dai_as_nn_data(nn_data);
+        if(!ptr->get()) {
+            last_error = "dai_nn_data_get_tensor_data_size: invalid NNData";
+            return 0;
+        }
+        const auto info = (*ptr)->getTensorInfo(name);
+        if(!info.has_value()) {
+            last_error = "dai_nn_data_get_tensor_data_size: tensor does not exist";
+            return 0;
+        }
+        return info->getTensorSize();
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nn_data_get_tensor_data_size failed: ") + e.what();
+        return 0;
+    }
+#else
+    (void)nn_data;
+    (void)name;
+    last_error =
+        "dai_nn_data_get_tensor_data_size: NNData is unavailable in this depthai-core version";
+    return 0;
+#endif
+}
+
+bool dai_nn_data_copy_tensor_data(DaiNNData nn_data,
+                                  const char* name,
+                                  uint8_t* destination,
+                                  size_t destination_len) {
+#if DAI_HAS_NN_DATA
+    if(!nn_data || !name) {
+        last_error = "dai_nn_data_copy_tensor_data: null NNData/name";
+        return false;
+    }
+    try {
+        const auto ptr = _dai_as_nn_data(nn_data);
+        if(!ptr->get()) {
+            last_error = "dai_nn_data_copy_tensor_data: invalid NNData";
+            return false;
+        }
+        const auto info = (*ptr)->getTensorInfo(name);
+        if(!info.has_value()) {
+            last_error = "dai_nn_data_copy_tensor_data: tensor does not exist";
+            return false;
+        }
+        const auto byte_length = info->getTensorSize();
+        const auto data = (*ptr)->getData();
+        if(info->offset > data.size() || byte_length > data.size() - info->offset) {
+            last_error = "dai_nn_data_copy_tensor_data: tensor range exceeds NNData storage";
+            return false;
+        }
+        if(destination_len < byte_length || (byte_length != 0 && !destination)) {
+            last_error = "dai_nn_data_copy_tensor_data: destination is too small";
+            return false;
+        }
+        if(byte_length != 0) {
+            std::memcpy(destination, data.data() + info->offset, byte_length);
+        }
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nn_data_copy_tensor_data failed: ") + e.what();
+        return false;
+    }
+#else
+    (void)nn_data;
+    (void)name;
+    (void)destination;
+    (void)destination_len;
+    last_error =
+        "dai_nn_data_copy_tensor_data: NNData is unavailable in this depthai-core version";
+    return false;
+#endif
+}
+
+void dai_nn_data_set_batch_size(DaiNNData nn_data, uint32_t batch_size) {
+#if DAI_HAS_NN_DATA
+    if(!nn_data) {
+        last_error = "dai_nn_data_set_batch_size: null NNData";
+        return;
+    }
+    try {
+        const auto ptr = _dai_as_nn_data(nn_data);
+        if(!ptr->get()) {
+            last_error = "dai_nn_data_set_batch_size: invalid NNData";
+            return;
+        }
+        (*ptr)->batchSize = batch_size;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nn_data_set_batch_size failed: ") + e.what();
+    }
+#else
+    (void)nn_data;
+    (void)batch_size;
+    last_error = "dai_nn_data_set_batch_size: NNData is unavailable in this depthai-core version";
+#endif
+}
+
+uint32_t dai_nn_data_get_batch_size(DaiNNData nn_data) {
+#if DAI_HAS_NN_DATA
+    if(!nn_data) {
+        last_error = "dai_nn_data_get_batch_size: null NNData";
+        return 0;
+    }
+    try {
+        const auto ptr = _dai_as_nn_data(nn_data);
+        if(!ptr->get()) {
+            last_error = "dai_nn_data_get_batch_size: invalid NNData";
+            return 0;
+        }
+        return (*ptr)->batchSize;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_nn_data_get_batch_size failed: ") + e.what();
+        return 0;
+    }
+#else
+    (void)nn_data;
+    last_error = "dai_nn_data_get_batch_size: NNData is unavailable in this depthai-core version";
+    return 0;
+#endif
+}
+
 DaiBuffer dai_image_manip_config_new() {
     try {
         auto cfg = std::make_shared<dai::ImageManipConfig>();
@@ -3482,6 +3975,30 @@ void dai_output_send_img_frame(DaiOutput output, DaiImgFrame frame) {
     } catch(const std::exception& e) {
         last_error = std::string("dai_output_send_img_frame failed: ") + e.what();
     }
+}
+
+void dai_output_send_nn_data(DaiOutput output, DaiNNData nn_data) {
+#if DAI_HAS_NN_DATA
+    if(!output || !nn_data) {
+        last_error = "dai_output_send_nn_data: null output/NNData";
+        return;
+    }
+    try {
+        auto out = static_cast<dai::Node::Output*>(output);
+        auto data = _dai_as_nn_data(nn_data);
+        if(!data->get()) {
+            last_error = "dai_output_send_nn_data: invalid NNData";
+            return;
+        }
+        out->send(*data);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_output_send_nn_data failed: ") + e.what();
+    }
+#else
+    (void)output;
+    (void)nn_data;
+    last_error = "dai_output_send_nn_data: NNData is unavailable in this depthai-core version";
+#endif
 }
 
 static inline std::string _dai_opt_cstr(const char* s) {
@@ -4895,6 +5412,29 @@ DaiBuffer dai_datatype_as_buffer(DaiDatatype msg) {
         last_error = std::string("dai_datatype_as_buffer failed: ") + e.what();
         return nullptr;
     }
+}
+
+DaiNNData dai_datatype_as_nn_data(DaiDatatype msg) {
+#if DAI_HAS_NN_DATA
+    if(!msg) {
+        last_error = "dai_datatype_as_nn_data: null msg";
+        return nullptr;
+    }
+    try {
+        auto ptr = static_cast<std::shared_ptr<dai::ADatatype>*>(msg);
+        auto nn_data = std::dynamic_pointer_cast<dai::NNData>(*ptr);
+        if(!nn_data) return nullptr;
+        return static_cast<DaiNNData>(
+            new std::shared_ptr<dai::NNData>(std::move(nn_data)));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_datatype_as_nn_data failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    (void)msg;
+    last_error = "dai_datatype_as_nn_data: NNData is unavailable in this depthai-core version";
+    return nullptr;
+#endif
 }
 
 DaiMessageGroup dai_datatype_as_message_group(DaiDatatype msg) {
@@ -6894,6 +7434,37 @@ void dai_input_queue_send_buffer(DaiInputQueue queue, DaiBuffer buffer) {
     } catch (const std::exception& e) {
         last_error = std::string("dai_input_queue_send_buffer failed: ") + e.what();
     }
+}
+
+void dai_input_queue_send_nn_data(DaiInputQueue queue, DaiNNData nn_data) {
+#if DAI_HAS_NN_DATA
+    if(!queue || !nn_data) {
+        last_error = "dai_input_queue_send_nn_data: null queue/NNData";
+        return;
+    }
+    try {
+        auto q = static_cast<std::shared_ptr<dai::InputQueue>*>(queue);
+        auto data = _dai_as_nn_data(nn_data);
+        if(!q->get() || !(*q)) {
+            last_error = "dai_input_queue_send_nn_data: invalid queue";
+            return;
+        }
+        if(!data->get() || !(*data)) {
+            last_error = "dai_input_queue_send_nn_data: invalid NNData";
+            return;
+        }
+        std::shared_ptr<dai::ADatatype> msg =
+            std::static_pointer_cast<dai::ADatatype>(*data);
+        (*q)->send(msg);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_input_queue_send_nn_data failed: ") + e.what();
+    }
+#else
+    (void)queue;
+    (void)nn_data;
+    last_error =
+        "dai_input_queue_send_nn_data: NNData is unavailable in this depthai-core version";
+#endif
 }
 
 DaiNode dai_pipeline_create_gate(DaiPipeline pipeline) {

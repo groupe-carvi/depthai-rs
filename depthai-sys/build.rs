@@ -1305,6 +1305,11 @@ fn build_cpp_wrapper(include_paths: &[PathBuf], opencv_enabled: bool) {
         .define("DEPTHAI_XTENSOR_SUPPORT", None)
         .file(PROJECT_ROOT.join("wrapper").join("wrapper.cpp"));
 
+    // The combined wrapper exceeds MSVC's default COFF section limit.
+    if target_env_is("msvc") {
+        cc_build.flag("/bigobj");
+    }
+
     if !opencv_enabled {
         cc_build.file(PROJECT_ROOT.join("wrapper").join("image_filters_stub.cpp"));
     }

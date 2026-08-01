@@ -88,7 +88,9 @@ struct RawCameraSensorConfig {
     fov: RawCameraFov,
     #[serde(rename = "type")]
     sensor_type: i32,
+    #[serde(default)]
     hdr: bool,
+    #[serde(default)]
     hfr: bool,
 }
 
@@ -335,7 +337,7 @@ unsafe impl Send for Device {}
 unsafe impl Sync for Device {}
 
 #[cfg(test)]
-mod tests {
+mod platform_tests {
     use super::*;
 
     #[test]
@@ -448,5 +450,44 @@ mod tests {
                 .to_string()
                 .contains("invalid connected camera features JSON")
         );
+    }
+
+    #[test]
+    fn parses_v3_1_sensor_configs_without_hdr_or_hfr() {
+        let json = r#"[{
+            "socket": 1,
+            "sensorName": "OV9282",
+            "width": 1280,
+            "height": 800,
+            "orientation": 0,
+            "supportedTypes": [1],
+            "hasAutofocusIC": false,
+            "hasAutofocus": false,
+            "name": "left",
+            "additionalNames": [],
+            "configs": [{
+                "width": 1280,
+                "height": 800,
+                "minFps": 5.0,
+                "maxFps": 120.0,
+                "fov": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "width": 1280.0,
+                    "height": 800.0,
+                    "normalized": false,
+                    "hasNormalized": false
+                },
+                "type": 1
+            }],
+            "calibrationResolution": null
+        }]"#;
+
+        let features = parse_camera_features_json(json).expect("v3.1 camera features should parse");
+        let config = &features[0].configs[0];
+        assert_eq!(features[0].socket, CameraBoardSocket::CamB);
+        assert_eq!(config.sensor_type, CameraSensorType::Mono);
+        assert!(!config.hdr);
+        assert!(!config.hfr);
     }
 }

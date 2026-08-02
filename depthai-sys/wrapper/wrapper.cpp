@@ -1882,6 +1882,60 @@ bool dai_input_get_wait_for_message(DaiInput input) {
     }
 }
 
+void dai_input_set_blocking(DaiInput input, bool blocking) {
+    if(!input) {
+        last_error = "dai_input_set_blocking: null input";
+        return;
+    }
+    try {
+        auto in = static_cast<dai::Node::Input*>(input);
+        in->setBlocking(blocking);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_input_set_blocking failed: ") + e.what();
+    }
+}
+
+bool dai_input_get_blocking(DaiInput input) {
+    if(!input) {
+        last_error = "dai_input_get_blocking: null input";
+        return false;
+    }
+    try {
+        auto in = static_cast<dai::Node::Input*>(input);
+        return in->getBlocking();
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_input_get_blocking failed: ") + e.what();
+        return false;
+    }
+}
+
+void dai_input_set_max_size(DaiInput input, unsigned int max_size) {
+    if(!input) {
+        last_error = "dai_input_set_max_size: null input";
+        return;
+    }
+    try {
+        auto in = static_cast<dai::Node::Input*>(input);
+        in->setMaxSize(max_size);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_input_set_max_size failed: ") + e.what();
+    }
+}
+
+unsigned int dai_input_get_max_size(DaiInput input) {
+    if(!input) {
+        last_error = "dai_input_get_max_size: null input";
+        return 0;
+    }
+    try {
+        auto in = static_cast<dai::Node::Input*>(input);
+        return in->getMaxSize();
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_input_get_max_size failed: ") + e.what();
+        return 0;
+    }
+}
+
 int dai_node_get_id(DaiNode node) {
     if(!node) {
         last_error = "dai_node_get_id: null node";

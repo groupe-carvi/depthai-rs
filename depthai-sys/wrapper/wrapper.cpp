@@ -6918,6 +6918,7 @@ bool dai_neural_network_build_from_camera_model_json(DaiNode node,
                                                      const char* model_json,
                                                      float fps,
                                                      int resize_mode) {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
     auto* nn = _dai_as_neural_network(node, "dai_neural_network_build_from_camera_model_json");
     if(!nn) return false;
     if(!model_json) {

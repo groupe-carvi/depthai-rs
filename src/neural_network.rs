@@ -271,6 +271,9 @@ impl NNData {
         }
 
         clear_error_flag();
+        if name.is_empty() {
+            return Err(DepthaiError::new(format!("tensor name must not be empty")));
+        }
         let name = CString::new(name).map_err(|_| DepthaiError::new("tensor name contains NUL"))?;
         let (strides, strides_len) = spec.strides.as_ref().map_or((ptr::null(), 0), |strides| {
             (strides.as_ptr(), strides.len())

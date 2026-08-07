@@ -404,12 +404,12 @@ impl NeuralNetworkNode {
 
     /// Retrieve one named entry from the node's `inputs` map.
     pub fn named_input(&self, name: &str) -> Result<Input> {
-        self.as_node().input_in_group("inputs", name)
+        self.as_node().input_in_map("inputs", name)
     }
 
     /// Retrieve one named entry from the node's `passthroughs` map.
     pub fn named_passthrough(&self, name: &str) -> Result<Output> {
-        self.as_node().output_in_group("passthroughs", name)
+        self.as_node().output_in_map("passthroughs", name)
     }
 
     pub fn set_nn_archive(&self, archive: &NNArchive) -> Result<()> {

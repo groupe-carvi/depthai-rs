@@ -6,7 +6,7 @@ use depthai_sys::{DaiInput, DaiOutput, depthai};
 
 use crate::camera::{ImageFrame, OutputQueue};
 use crate::encoded_frame::EncodedFrameQueue;
-use crate::error::{Result, clear_error_flag, last_error};
+use crate::error::{Result, clear_error_flag, last_error, take_error_if_any};
 use crate::host_node::Buffer;
 use crate::neural_network::NNData;
 use crate::pipeline::{Node, PipelineInner};
@@ -211,6 +211,32 @@ impl Input {
             Ok(InputQueue::from_handle(handle))
         }
     }
+
+    pub fn set_wait_for_message(&self, wait: bool) -> Result<()> {
+        clear_error_flag();
+        unsafe { depthai::dai_input_set_wait_for_message(self.handle, wait) };
+        if let Some(err) = take_error_if_any("failed to set wait for message") {
+            return Err(err);
+        }
+        Ok(())
+    }
+
+    pub fn wait_for_message(&self) -> Result<bool> {
+        clear_error_flag();
+        let wait = unsafe { depthai::dai_input_get_wait_for_message(self.handle) };
+        if let Some(err) = take_error_if_any("failed to get wait for message") {
+            return Err(err);
+        }
+        Ok(wait)
+    }
+
+    pub fn set_reuse_previous_message(&self, reuse: bool) -> Result<()> {
+        self.set_wait_for_message(!reuse)
+    }
+
+    pub fn reuse_previous_message(&self) -> Result<bool> {
+        Ok(!self.wait_for_message()?)
+    }
 }
 
 impl Node {
@@ -274,5 +300,31 @@ impl Node {
         } else {
             Ok(Input::from_handle(Arc::clone(&self.pipeline), handle))
         }
+    }
+
+    pub(crate) fn input_in_map(&self, map: &str, name: &str) -> Result<Input> {
+        let name_c = CString::new(name).map_err(|_| last_error("invalid input name"))?;
+        let map_c = CString::new(map).map_err(|_| last_error("invalid input map name"))?;
+        clear_error_flag();
+        let handle = unsafe {
+            depthai::dai_node_get_or_create_input(self.handle(), map_c.as_ptr(), name_c.as_ptr())
+        };
+        if handle.is_null() {
+            return Err(last_error("failed to get or create node input"));
+        }
+        Ok(Input::from_handle(Arc::clone(&self.pipeline), handle))
+    }
+
+    pub(crate) fn output_in_map(&self, map: &str, name: &str) -> Result<Output> {
+        let name_c = CString::new(name).map_err(|_| last_error("invalid output name"))?;
+        let map_c = CString::new(map).map_err(|_| last_error("invalid output map name"))?;
+        clear_error_flag();
+        let handle = unsafe {
+            depthai::dai_node_get_or_create_output(self.handle(), map_c.as_ptr(), name_c.as_ptr())
+        };
+        if handle.is_null() {
+            return Err(last_error("failed to get or create node output"));
+        }
+        Ok(Output::from_handle(Arc::clone(&self.pipeline), handle))
     }
 }

@@ -542,8 +542,8 @@ pub use model_zoo::{
     get_model_from_zoo,
 };
 pub use neural_network::{
-    NNData, NeuralNetworkNode, TensorDataType, TensorInfo, TensorQuantization, TensorSpec,
-    TensorStorageOrder,
+    DeviceModelZoo, NNData, NeuralNetworkNode, TensorDataType, TensorInfo, TensorQuantization,
+    TensorSpec, TensorStorageOrder,
 };
 pub use nn_archive::{ArchiveCompression, ModelType, NNArchive, NNArchiveOptions};
 pub use output::{Input, Output};

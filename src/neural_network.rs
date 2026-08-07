@@ -17,6 +17,22 @@ use crate::host_node::Buffer;
 use crate::nn_archive::NNArchive;
 use crate::output::{Input, Output};
 
+/// On-device neural-depth model selection for RVC4 devices.
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceModelZoo {
+    NeuralDepth1248x780 = 0,
+    NeuralDepth768x480 = 1,
+    NeuralDepth576x360 = 2,
+    NeuralDepth480x300 = 3,
+    NeuralDepth384x240 = 4,
+    NeuralDepth1056x660 = 5,
+    NeuralDepth960x600 = 6,
+    NeuralDepth864x540 = 7,
+    NeuralDepth288x180 = 8,
+    NeuralDepth192x120 = 9,
+}
+
 /// Tensor element type used by `dai::TensorInfo`.
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -497,6 +513,17 @@ impl NeuralNetworkNode {
             )
         };
         check_void_result("failed to set NeuralNetwork backend properties")
+    }
+
+    pub fn set_model_from_device_zoo(&self, model: DeviceModelZoo) -> Result<()> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_neural_network_set_model_from_device_zoo(
+                self.node.handle(),
+                (model as i32).into(),
+            )
+        };
+        check_void_result("failed to set model from device zoo")
     }
 }
 

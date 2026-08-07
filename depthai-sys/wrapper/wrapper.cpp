@@ -6695,6 +6695,7 @@ DaiNNArchive dai_neural_network_get_nn_archive(DaiNode node) {
 }
 
 void dai_neural_network_set_from_model_zoo_json(DaiNode node, const char* description_json, bool use_cached) {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
     auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_from_model_zoo_json");
     if(!nn) return;
     if(!description_json) {

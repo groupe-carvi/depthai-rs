@@ -611,6 +611,90 @@ impl NeuralNetworkNode {
         };
         check_void_result("failed to set model from device zoo")
     }
+
+    pub fn build_from_output(&self, output: &Output, archive: &NNArchive) -> Result<()> {
+        clear_error_flag();
+        let ok = unsafe {
+            depthai::dai_neural_network_build_from_output(
+                self.node.handle(),
+                output.handle(),
+                archive.handle(),
+            )
+        };
+
+        if ok {
+            Ok(())
+        } else {
+            Err(last_error(
+                "failed to build neural network node from output",
+            ))
+        }
+    }
+
+    pub fn build_from_camera_model(
+        &self,
+        camera: &CameraNode,
+        model: &NNModelDescription,
+        fps: Option<f32>,
+        resize_mode: Option<ResizeMode>,
+    ) -> Result<()> {
+        let model_json = serde_json::to_string(model).map_err(|e| {
+            DepthaiError::new(format!("failed to serialize model description: {e}"))
+        })?;
+        let model_c = CString::new(model_json)
+            .map_err(|_| DepthaiError::new("model description contains NUL"))?;
+        let fps_c = fps.unwrap_or(-1.0);
+        let resize_c = resize_mode.map(|mode| mode as i32).unwrap_or(-1);
+
+        clear_error_flag();
+        let ok = unsafe {
+            depthai::dai_neural_network_build_from_camera_model_json(
+                self.node.handle(),
+                camera.as_node().handle() as DaiCameraNode,
+                model_c.as_ptr(),
+                fps_c,
+                c_int(resize_c),
+            )
+        };
+
+        if ok {
+            Ok(())
+        } else {
+            Err(last_error(
+                "failed to build neural network from camera model",
+            ))
+        }
+    }
+
+    pub fn build_from_camera_archive(
+        &self,
+        camera: &CameraNode,
+        archive: &NNArchive,
+        fps: Option<f32>,
+        resize_mode: Option<ResizeMode>,
+    ) -> Result<()> {
+        let fps_c = fps.unwrap_or(-1.0);
+        let resize_c = resize_mode.map(|mode| mode as i32).unwrap_or(-1);
+
+        clear_error_flag();
+        let ok = unsafe {
+            depthai::dai_neural_network_build_from_camera_archive(
+                self.node.handle(),
+                camera.as_node().handle() as DaiCameraNode,
+                archive.handle(),
+                fps_c,
+                c_int(resize_c),
+            )
+        };
+
+        if ok {
+            Ok(())
+        } else {
+            Err(last_error(
+                "failed to build neural network from camera archive",
+            ))
+        }
+    }
 }
 
 fn check_void_result(context: &str) -> Result<()> {

@@ -142,6 +142,9 @@ impl Output {
             Ok(())
         }
     }
+    pub(crate) fn handle(&self) -> DaiOutput {
+        self.handle
+    }
 }
 
 impl Input {

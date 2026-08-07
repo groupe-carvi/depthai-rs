@@ -4,14 +4,17 @@
 //! tensor names, preprocessing, postprocessing, and product policy belong in
 //! downstream applications.
 
+use autocxx::c_int;
 use std::collections::BTreeMap;
 use std::ffi::{CStr, CString};
 use std::path::Path;
 use std::ptr;
 
-use depthai_sys::{DaiNNData, depthai};
+use depthai_sys::{DaiCameraNode, DaiNNData, depthai};
 use serde::Deserialize;
 
+use crate::NNModelDescription;
+use crate::camera::{CameraNode, ResizeMode};
 use crate::error::{DepthaiError, Result, clear_error_flag, last_error, take_error_if_any};
 use crate::host_node::Buffer;
 use crate::nn_archive::NNArchive;
@@ -513,6 +516,89 @@ impl NeuralNetworkNode {
             )
         };
         check_void_result("failed to set NeuralNetwork backend properties")
+    }
+
+    pub fn nn_archive(&self) -> Result<Option<NNArchive>> {
+        clear_error_flag();
+        let archive = unsafe { depthai::dai_neural_network_get_nn_archive(self.node.handle()) };
+        if let Some(err) = take_error_if_any("failed to get NNArchive") {
+            return Err(err);
+        }
+        if archive.is_null() {
+            return Ok(None);
+        }
+        Ok(Some(NNArchive::from_handle(archive)))
+    }
+
+    pub fn set_blob_path(&self, path: impl AsRef<Path>) -> Result<()> {
+        let path = path
+            .as_ref()
+            .to_str()
+            .ok_or_else(|| DepthaiError::new("blob path is not valid UTF-8"))?;
+        let path = CString::new(path).map_err(|_| DepthaiError::new("blob path contains NUL"))?;
+        clear_error_flag();
+        unsafe { depthai::dai_neural_network_set_blob_path(self.node.handle(), path.as_ptr()) };
+        check_void_result("failed to set NeuralNetwork blob path")
+    }
+
+    pub fn set_blob_bytes(&self, bytes: &[u8]) -> Result<()> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_neural_network_set_blob_bytes(
+                self.node.handle(),
+                bytes.as_ptr() as *const _,
+                bytes.len(),
+            )
+        };
+        check_void_result("failed to set blob bytes")
+    }
+
+    pub fn set_other_model_path(&self, path: impl AsRef<Path>) -> Result<()> {
+        let path = path
+            .as_ref()
+            .to_str()
+            .ok_or_else(|| DepthaiError::new("other model path is not valid UTF-8"))?;
+        let path =
+            CString::new(path).map_err(|_| DepthaiError::new("other model path contains NUL"))?;
+        clear_error_flag();
+        unsafe {
+            depthai::dai_neural_network_set_other_model_path(self.node.handle(), path.as_ptr())
+        };
+        check_void_result("failed to set NeuralNetwork other model path")
+    }
+
+    pub fn set_other_model_bytes(&self, bytes: &[u8]) -> Result<()> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_neural_network_set_other_model_bytes(
+                self.node.handle(),
+                bytes.as_ptr() as *const _,
+                bytes.len(),
+            )
+        };
+        check_void_result("failed to set other model bytes")
+    }
+
+    pub fn set_from_model_zoo(
+        &self,
+        description: &NNModelDescription,
+        use_cached: bool,
+    ) -> Result<()> {
+        let desc_json = serde_json::to_string(description).map_err(|e| {
+            DepthaiError::new(format!("failed to serialize model description: {e}"))
+        })?;
+        let desc_c = CString::new(desc_json)
+            .map_err(|_| DepthaiError::new("model description contains NUL"))?;
+
+        clear_error_flag();
+        unsafe {
+            depthai::dai_neural_network_set_from_model_zoo_json(
+                self.node.handle(),
+                desc_c.as_ptr(),
+                use_cached,
+            )
+        };
+        check_void_result("failed to set from model zoo")
     }
 
     pub fn set_model_from_device_zoo(&self, model: DeviceModelZoo) -> Result<()> {

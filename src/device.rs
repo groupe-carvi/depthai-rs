@@ -88,7 +88,9 @@ struct RawCameraSensorConfig {
     fov: RawCameraFov,
     #[serde(rename = "type")]
     sensor_type: i32,
+    #[serde(default)]
     hdr: bool,
+    #[serde(default)]
     hfr: bool,
 }
 
@@ -168,6 +170,17 @@ fn parse_camera_features_json(json: &str) -> Result<Vec<CameraFeatures>> {
         ))
     })?;
     Ok(raw.into_iter().map(Into::into).collect())
+}
+
+impl DevicePlatform {
+    pub fn from_raw(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Rvc2),
+            1 => Some(Self::Rvc3),
+            2 => Some(Self::Rvc4),
+            _ => None,
+        }
+    }
 }
 
 impl Device {
@@ -323,6 +336,30 @@ impl Drop for Device {
 unsafe impl Send for Device {}
 unsafe impl Sync for Device {}
 
+#[cfg(test)]
+mod platform_tests {
+    use super::*;
+
+    #[test]
+    fn device_platform_converts_known_raw_values() {
+        let cases = [
+            (0, DevicePlatform::Rvc2),
+            (1, DevicePlatform::Rvc3),
+            (2, DevicePlatform::Rvc4),
+        ];
+
+        for (raw, expected) in cases {
+            assert_eq!(DevicePlatform::from_raw(raw), Some(expected));
+        }
+    }
+
+    #[test]
+    fn device_platform_rejects_unknown_raw_values() {
+        assert_eq!(DevicePlatform::from_raw(-1), None);
+        assert_eq!(DevicePlatform::from_raw(3), None);
+    }
+}
+
 /// Returns the device IDs of all currently-connected OAK boards.
 ///
 /// IDs appear in the same order that [`Device::new`] would pick them, so `ids[0]` is
@@ -413,5 +450,44 @@ mod tests {
                 .to_string()
                 .contains("invalid connected camera features JSON")
         );
+    }
+
+    #[test]
+    fn parses_v3_1_sensor_configs_without_hdr_or_hfr() {
+        let json = r#"[{
+            "socket": 1,
+            "sensorName": "OV9282",
+            "width": 1280,
+            "height": 800,
+            "orientation": 0,
+            "supportedTypes": [1],
+            "hasAutofocusIC": false,
+            "hasAutofocus": false,
+            "name": "left",
+            "additionalNames": [],
+            "configs": [{
+                "width": 1280,
+                "height": 800,
+                "minFps": 5.0,
+                "maxFps": 120.0,
+                "fov": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "width": 1280.0,
+                    "height": 800.0,
+                    "normalized": false,
+                    "hasNormalized": false
+                },
+                "type": 1
+            }],
+            "calibrationResolution": null
+        }]"#;
+
+        let features = parse_camera_features_json(json).expect("v3.1 camera features should parse");
+        let config = &features[0].configs[0];
+        assert_eq!(features[0].socket, CameraBoardSocket::CamB);
+        assert_eq!(config.sensor_type, CameraSensorType::Mono);
+        assert!(!config.hdr);
+        assert!(!config.hfr);
     }
 }

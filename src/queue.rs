@@ -1,15 +1,16 @@
-use std::ffi::{c_char, c_void as std_c_void, CStr, CString};
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::ffi::{CStr, CString, c_char, c_void as std_c_void};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use autocxx::{c_int, c_uint, c_void as autocxx_c_void};
-use depthai_sys::{depthai, DaiDataQueue, DaiDatatype, DaiInputQueue};
+use depthai_sys::{DaiDataQueue, DaiDatatype, DaiInputQueue, depthai};
 
-use crate::camera::{ImageFrame};
+use crate::camera::ImageFrame;
 use crate::encoded_frame::EncodedFrame;
-use crate::error::{clear_error_flag, last_error, take_error_if_any, Result};
+use crate::error::{Result, clear_error_flag, last_error, take_error_if_any};
 use crate::host_node::{Buffer, MessageGroup};
+use crate::neural_network::NNData;
 use crate::pointcloud::PointCloudData;
 use crate::rgbd::RgbdData;
 
@@ -259,6 +260,20 @@ impl Datatype {
         }
     }
 
+    pub fn as_nn_data(&self) -> Result<Option<NNData>> {
+        clear_error_flag();
+        let handle = unsafe { depthai::dai_datatype_as_nn_data(self.handle) };
+        if handle.is_null() {
+            if let Some(error) = take_error_if_any("failed to cast datatype to NNData") {
+                Err(error)
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(Some(NNData::from_handle(handle)))
+        }
+    }
+
     pub fn as_message_group(&self) -> Result<Option<MessageGroup>> {
         clear_error_flag();
         let h = unsafe { depthai::dai_datatype_as_message_group(self.handle) };
@@ -503,7 +518,8 @@ impl MessageQueue {
         clear_error_flag();
         let timeout_ms = timeout.map(|d| d.as_millis() as i32).unwrap_or(-1);
         let mut timed_out = false;
-        let arr = unsafe { depthai::dai_queue_get_all(self.handle(), c_int(timeout_ms), &mut timed_out) };
+        let arr =
+            unsafe { depthai::dai_queue_get_all(self.handle(), c_int(timeout_ms), &mut timed_out) };
         if arr.is_null() {
             if let Some(err) = take_error_if_any("failed to get_all") {
                 return Err(err);
@@ -545,7 +561,13 @@ impl MessageQueue {
 
     pub fn send_timeout(&self, msg: &Datatype, timeout: Duration) -> Result<bool> {
         clear_error_flag();
-        let ok = unsafe { depthai::dai_queue_send_timeout(self.handle(), msg.handle(), c_int(timeout.as_millis() as i32)) };
+        let ok = unsafe {
+            depthai::dai_queue_send_timeout(
+                self.handle(),
+                msg.handle(),
+                c_int(timeout.as_millis() as i32),
+            )
+        };
         if let Some(err) = take_error_if_any("failed to send message with timeout") {
             Err(err)
         } else {
@@ -568,7 +590,14 @@ impl MessageQueue {
         let cb_fn = queue_callback_trampoline as usize;
         let drop_fn = queue_callback_drop as usize;
 
-        let id = unsafe { depthai::dai_queue_add_callback(self.handle(), ctx as *mut autocxx_c_void, cb_fn, drop_fn) };
+        let id = unsafe {
+            depthai::dai_queue_add_callback(
+                self.handle(),
+                ctx as *mut autocxx_c_void,
+                cb_fn,
+                drop_fn,
+            )
+        };
         let id_i32: i32 = id.0;
 
         if id_i32 < 0 {
@@ -587,7 +616,11 @@ struct QueueCallbackState {
     callback: Mutex<Box<dyn FnMut(&str, Datatype) + Send>>,
 }
 
-unsafe extern "C" fn queue_callback_trampoline(ctx: *mut std_c_void, queue_name: *const c_char, msg: DaiDatatype) {
+unsafe extern "C" fn queue_callback_trampoline(
+    ctx: *mut std_c_void,
+    queue_name: *const c_char,
+    msg: DaiDatatype,
+) {
     if ctx.is_null() {
         return;
     }
@@ -626,7 +659,9 @@ impl Drop for QueueCallbackHandle {
     fn drop(&mut self) {
         // Best-effort: removing a callback shouldn't be able to panic.
         clear_error_flag();
-        let _ = unsafe { depthai::dai_queue_remove_callback(self.queue.handle(), c_int(self.callback_id)) };
+        let _ = unsafe {
+            depthai::dai_queue_remove_callback(self.queue.handle(), c_int(self.callback_id))
+        };
     }
 }
 
@@ -669,6 +704,17 @@ impl InputQueue {
         unsafe { depthai::dai_input_queue_send_buffer(self.handle, buffer.handle()) };
         if let Some(err) = take_error_if_any("failed to send buffer to input queue") {
             Err(err)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Send a typed `NNData` message through a host-to-device input queue.
+    pub fn send_nn_data(&self, nn_data: &NNData) -> Result<()> {
+        clear_error_flag();
+        unsafe { depthai::dai_input_queue_send_nn_data(self.handle, nn_data.handle()) };
+        if let Some(error) = take_error_if_any("failed to send NNData to input queue") {
+            Err(error)
         } else {
             Ok(())
         }

@@ -1299,7 +1299,16 @@ fn build_cpp_wrapper(include_paths: &[PathBuf], opencv_enabled: bool) {
     cc_build
         .cpp(true)
         .std("c++17")
+        // NNData's typed add/getTensor helpers are conditionally declared by DepthAI-Core.
+        // The native build uses the core default (DEPTHAI_XTENSOR_SUPPORT=ON), so expose the
+        // same declarations while compiling our C++ wrapper.
+        .define("DEPTHAI_XTENSOR_SUPPORT", None)
         .file(PROJECT_ROOT.join("wrapper").join("wrapper.cpp"));
+
+    // The combined wrapper exceeds MSVC's default COFF section limit.
+    if target_env_is("msvc") {
+        cc_build.flag("/bigobj");
+    }
 
     if !opencv_enabled {
         cc_build.file(PROJECT_ROOT.join("wrapper").join("image_filters_stub.cpp"));

@@ -2,12 +2,13 @@ use std::ffi::CString;
 use std::sync::Arc;
 
 use autocxx::c_uint;
-use depthai_sys::{depthai, DaiOutput, DaiInput};
+use depthai_sys::{DaiInput, DaiOutput, depthai};
 
 use crate::camera::{ImageFrame, OutputQueue};
 use crate::encoded_frame::EncodedFrameQueue;
-use crate::error::{clear_error_flag, last_error, Result};
+use crate::error::{Result, clear_error_flag, last_error};
 use crate::host_node::Buffer;
+use crate::neural_network::NNData;
 use crate::pipeline::{Node, PipelineInner};
 use crate::queue::{InputQueue, MessageQueue};
 
@@ -71,7 +72,8 @@ impl Output {
 
     pub fn create_queue(&self, max_size: u32, blocking: bool) -> Result<OutputQueue> {
         clear_error_flag();
-        let handle = unsafe { depthai::dai_output_create_queue(self.handle, c_uint(max_size), blocking) };
+        let handle =
+            unsafe { depthai::dai_output_create_queue(self.handle, c_uint(max_size), blocking) };
         if handle.is_null() {
             Err(last_error("failed to create output queue"))
         } else {
@@ -84,7 +86,8 @@ impl Output {
     /// This maps closely to DepthAI-Core's `MessageQueue`/`DataOutputQueue` API.
     pub fn create_message_queue(&self, max_size: u32, blocking: bool) -> Result<MessageQueue> {
         clear_error_flag();
-        let handle = unsafe { depthai::dai_output_create_queue(self.handle, c_uint(max_size), blocking) };
+        let handle =
+            unsafe { depthai::dai_output_create_queue(self.handle, c_uint(max_size), blocking) };
         if handle.is_null() {
             Err(last_error("failed to create message queue"))
         } else {
@@ -95,9 +98,14 @@ impl Output {
     /// Create an output queue that yields `EncodedFrame` messages.
     ///
     /// This is primarily used with `VideoEncoderNode::out()`.
-    pub fn create_encoded_frame_queue(&self, max_size: u32, blocking: bool) -> Result<EncodedFrameQueue> {
+    pub fn create_encoded_frame_queue(
+        &self,
+        max_size: u32,
+        blocking: bool,
+    ) -> Result<EncodedFrameQueue> {
         clear_error_flag();
-        let handle = unsafe { depthai::dai_output_create_queue(self.handle, c_uint(max_size), blocking) };
+        let handle =
+            unsafe { depthai::dai_output_create_queue(self.handle, c_uint(max_size), blocking) };
         if handle.is_null() {
             Err(last_error("failed to create encoded frame output queue"))
         } else {
@@ -120,6 +128,16 @@ impl Output {
         unsafe { depthai::dai_output_send_img_frame(self.handle, frame.handle()) };
         if let Some(err) = crate::error::take_error_if_any("failed to send frame") {
             Err(err)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn send_nn_data(&self, nn_data: &NNData) -> Result<()> {
+        clear_error_flag();
+        unsafe { depthai::dai_output_send_nn_data(self.handle, nn_data.handle()) };
+        if let Some(error) = crate::error::take_error_if_any("failed to send NNData") {
+            Err(error)
         } else {
             Ok(())
         }
@@ -184,7 +202,9 @@ impl Input {
     /// This is the canonical way to send messages into a pipeline input from the host.
     pub fn create_input_queue(&self, max_size: u32, blocking: bool) -> Result<InputQueue> {
         clear_error_flag();
-        let handle = unsafe { depthai::dai_input_create_input_queue(self.handle, c_uint(max_size), blocking) };
+        let handle = unsafe {
+            depthai::dai_input_create_input_queue(self.handle, c_uint(max_size), blocking)
+        };
         if handle.is_null() {
             Err(last_error("failed to create input queue"))
         } else {
@@ -195,9 +215,29 @@ impl Input {
 
 impl Node {
     pub fn output(&self, name: &str) -> Result<Output> {
+        self.output_with_group(None, name)
+    }
+
+    /// Retrieve an output-map entry by DepthAI port group and name.
+    pub fn output_in_group(&self, group: &str, name: &str) -> Result<Output> {
+        self.output_with_group(Some(group), name)
+    }
+
+    fn output_with_group(&self, group: Option<&str>, name: &str) -> Result<Output> {
         clear_error_flag();
         let name_c = CString::new(name).map_err(|_| last_error("invalid output name"))?;
-        let handle = unsafe { depthai::dai_node_get_output(self.handle(), std::ptr::null(), name_c.as_ptr()) };
+        let group_c = group
+            .map(|group| CString::new(group).map_err(|_| last_error("invalid output group")))
+            .transpose()?;
+        let handle = unsafe {
+            depthai::dai_node_get_output(
+                self.handle(),
+                group_c
+                    .as_ref()
+                    .map_or(std::ptr::null(), |group| group.as_ptr()),
+                name_c.as_ptr(),
+            )
+        };
         if handle.is_null() {
             Err(last_error("failed to get node output"))
         } else {
@@ -206,9 +246,29 @@ impl Node {
     }
 
     pub fn input(&self, name: &str) -> Result<Input> {
+        self.input_with_group(None, name)
+    }
+
+    /// Retrieve an input-map entry by DepthAI port group and name.
+    pub fn input_in_group(&self, group: &str, name: &str) -> Result<Input> {
+        self.input_with_group(Some(group), name)
+    }
+
+    fn input_with_group(&self, group: Option<&str>, name: &str) -> Result<Input> {
         clear_error_flag();
         let name_c = CString::new(name).map_err(|_| last_error("invalid input name"))?;
-        let handle = unsafe { depthai::dai_node_get_input(self.handle(), std::ptr::null(), name_c.as_ptr()) };
+        let group_c = group
+            .map(|group| CString::new(group).map_err(|_| last_error("invalid input group")))
+            .transpose()?;
+        let handle = unsafe {
+            depthai::dai_node_get_input(
+                self.handle(),
+                group_c
+                    .as_ref()
+                    .map_or(std::ptr::null(), |group| group.as_ptr()),
+                name_c.as_ptr(),
+            )
+        };
         if handle.is_null() {
             Err(last_error("failed to get node input"))
         } else {

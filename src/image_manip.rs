@@ -1,8 +1,8 @@
 use autocxx::c_int;
-use depthai_sys::{depthai, DaiBuffer};
+use depthai_sys::{DaiBuffer, depthai};
 
 use crate::common::ImageFrameType;
-use crate::error::{clear_error_flag, last_error, take_error_if_any, Result};
+use crate::error::{Result, clear_error_flag, last_error, take_error_if_any};
 use crate::host_node::Buffer;
 
 /// Resize mode for `ImageManipConfig::set_output_size`.
@@ -57,6 +57,14 @@ pub enum PerformanceMode {
     LowPower = 2,
 }
 
+fn check_void_result(context: &str) -> Result<()> {
+    if let Some(error) = take_error_if_any(context) {
+        Err(error)
+    } else {
+        Ok(())
+    }
+}
+
 /// Image manipulation configuration message.
 ///
 /// Mirrors C++: `dai::ImageManipConfig`.
@@ -103,15 +111,39 @@ impl ImageManipConfig {
         self
     }
 
+    /// Checked variant of [`Self::clear_ops`].
+    pub fn try_clear_ops(&mut self) -> Result<&mut Self> {
+        clear_error_flag();
+        unsafe { depthai::dai_image_manip_config_clear_ops(self.handle()) };
+        check_void_result("failed to clear ImageManip operations")?;
+        Ok(self)
+    }
+
     pub fn add_crop_xywh(&mut self, x: u32, y: u32, w: u32, h: u32) -> &mut Self {
         clear_error_flag();
         unsafe { depthai::dai_image_manip_config_add_crop_xywh(self.handle(), x, y, w, h) };
         self
     }
 
-    pub fn add_crop_rect(&mut self, x: f32, y: f32, w: f32, h: f32, normalized_coords: bool) -> &mut Self {
+    pub fn add_crop_rect(
+        &mut self,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        normalized_coords: bool,
+    ) -> &mut Self {
         clear_error_flag();
-        unsafe { depthai::dai_image_manip_config_add_crop_rect(self.handle(), x, y, w, h, normalized_coords) };
+        unsafe {
+            depthai::dai_image_manip_config_add_crop_rect(
+                self.handle(),
+                x,
+                y,
+                w,
+                h,
+                normalized_coords,
+            )
+        };
         self
     }
 
@@ -152,10 +184,30 @@ impl ImageManipConfig {
         self
     }
 
-    /// Rotates around the specified center point (interpreted as normalized coordinates).
-    pub fn add_rotate_deg_center(&mut self, angle_deg: f32, center_x: f32, center_y: f32) -> &mut Self {
+    /// Checked variant of [`Self::add_rotate_deg`].
+    pub fn try_add_rotate_deg(&mut self, angle_deg: f32) -> Result<&mut Self> {
         clear_error_flag();
-        unsafe { depthai::dai_image_manip_config_add_rotate_deg_center(self.handle(), angle_deg, center_x, center_y) };
+        unsafe { depthai::dai_image_manip_config_add_rotate_deg(self.handle(), angle_deg) };
+        check_void_result("failed to add ImageManip rotation")?;
+        Ok(self)
+    }
+
+    /// Rotates around the specified center point (interpreted as normalized coordinates).
+    pub fn add_rotate_deg_center(
+        &mut self,
+        angle_deg: f32,
+        center_x: f32,
+        center_y: f32,
+    ) -> &mut Self {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_image_manip_config_add_rotate_deg_center(
+                self.handle(),
+                angle_deg,
+                center_x,
+                center_y,
+            )
+        };
         self
     }
 
@@ -173,13 +225,20 @@ impl ImageManipConfig {
 
     pub fn add_transform_affine(&mut self, matrix_2x2: [f32; 4]) -> &mut Self {
         clear_error_flag();
-        unsafe { depthai::dai_image_manip_config_add_transform_affine(self.handle(), matrix_2x2.as_ptr()) };
+        unsafe {
+            depthai::dai_image_manip_config_add_transform_affine(self.handle(), matrix_2x2.as_ptr())
+        };
         self
     }
 
     pub fn add_transform_perspective(&mut self, matrix_3x3: [f32; 9]) -> &mut Self {
         clear_error_flag();
-        unsafe { depthai::dai_image_manip_config_add_transform_perspective(self.handle(), matrix_3x3.as_ptr()) };
+        unsafe {
+            depthai::dai_image_manip_config_add_transform_perspective(
+                self.handle(),
+                matrix_3x3.as_ptr(),
+            )
+        };
         self
     }
 
@@ -212,8 +271,25 @@ impl ImageManipConfig {
 
     pub fn set_output_size(&mut self, w: u32, h: u32, mode: ImageManipResizeMode) -> &mut Self {
         clear_error_flag();
-        unsafe { depthai::dai_image_manip_config_set_output_size(self.handle(), w, h, c_int(mode as i32)) };
+        unsafe {
+            depthai::dai_image_manip_config_set_output_size(self.handle(), w, h, c_int(mode as i32))
+        };
         self
+    }
+
+    /// Checked variant of [`Self::set_output_size`].
+    pub fn try_set_output_size(
+        &mut self,
+        w: u32,
+        h: u32,
+        mode: ImageManipResizeMode,
+    ) -> Result<&mut Self> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_image_manip_config_set_output_size(self.handle(), w, h, c_int(mode as i32))
+        };
+        check_void_result("failed to set ImageManip output size")?;
+        Ok(self)
     }
 
     pub fn set_output_center(&mut self, center: bool) -> &mut Self {
@@ -224,13 +300,22 @@ impl ImageManipConfig {
 
     pub fn set_colormap(&mut self, colormap: Colormap) -> &mut Self {
         clear_error_flag();
-        unsafe { depthai::dai_image_manip_config_set_colormap(self.handle(), c_int(colormap as i32)) };
+        unsafe {
+            depthai::dai_image_manip_config_set_colormap(self.handle(), c_int(colormap as i32))
+        };
         self
     }
 
     pub fn set_background_color_rgb(&mut self, red: u32, green: u32, blue: u32) -> &mut Self {
         clear_error_flag();
-        unsafe { depthai::dai_image_manip_config_set_background_color_rgb(self.handle(), red, green, blue) };
+        unsafe {
+            depthai::dai_image_manip_config_set_background_color_rgb(
+                self.handle(),
+                red,
+                green,
+                blue,
+            )
+        };
         self
     }
 
@@ -242,8 +327,20 @@ impl ImageManipConfig {
 
     pub fn set_frame_type(&mut self, frame_type: ImageFrameType) -> &mut Self {
         clear_error_flag();
-        unsafe { depthai::dai_image_manip_config_set_frame_type(self.handle(), c_int(frame_type as i32)) };
+        unsafe {
+            depthai::dai_image_manip_config_set_frame_type(self.handle(), c_int(frame_type as i32))
+        };
         self
+    }
+
+    /// Checked variant of [`Self::set_frame_type`].
+    pub fn try_set_frame_type(&mut self, frame_type: ImageFrameType) -> Result<&mut Self> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_image_manip_config_set_frame_type(self.handle(), c_int(frame_type as i32))
+        };
+        check_void_result("failed to set ImageManip frame type")?;
+        Ok(self)
     }
 
     pub fn set_undistort(&mut self, undistort: bool) -> &mut Self {
@@ -296,7 +393,11 @@ impl ImageManipConfig {
 }
 
 #[allow(non_snake_case)]
-#[crate::native_node_wrapper(native = "dai::node::ImageManip", inputs(inputConfig, inputImage), outputs(out))]
+#[crate::native_node_wrapper(
+    native = "dai::node::ImageManip",
+    inputs(inputConfig, inputImage),
+    outputs(out)
+)]
 pub struct ImageManipNode {
     node: crate::pipeline::Node,
 }
@@ -304,12 +405,31 @@ pub struct ImageManipNode {
 impl ImageManipNode {
     pub fn set_num_frames_pool(&self, num_frames_pool: i32) {
         clear_error_flag();
-        unsafe { depthai::dai_image_manip_set_num_frames_pool(self.node.handle(), c_int(num_frames_pool)) };
+        unsafe {
+            depthai::dai_image_manip_set_num_frames_pool(self.node.handle(), c_int(num_frames_pool))
+        };
     }
 
     pub fn set_max_output_frame_size(&self, max_frame_size: i32) {
         clear_error_flag();
-        unsafe { depthai::dai_image_manip_set_max_output_frame_size(self.node.handle(), c_int(max_frame_size)) };
+        unsafe {
+            depthai::dai_image_manip_set_max_output_frame_size(
+                self.node.handle(),
+                c_int(max_frame_size),
+            )
+        };
+    }
+
+    /// Checked variant of [`Self::set_max_output_frame_size`].
+    pub fn try_set_max_output_frame_size(&self, max_frame_size: i32) -> Result<()> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_image_manip_set_max_output_frame_size(
+                self.node.handle(),
+                c_int(max_frame_size),
+            )
+        };
+        check_void_result("failed to set ImageManip maximum output frame size")
     }
 
     pub fn set_run_on_host(&self, run_on_host: bool) {
@@ -317,14 +437,45 @@ impl ImageManipNode {
         unsafe { depthai::dai_image_manip_set_run_on_host(self.node.handle(), run_on_host) };
     }
 
+    /// Checked variant of [`Self::set_run_on_host`].
+    pub fn try_set_run_on_host(&self, run_on_host: bool) -> Result<()> {
+        clear_error_flag();
+        unsafe { depthai::dai_image_manip_set_run_on_host(self.node.handle(), run_on_host) };
+        check_void_result("failed to set ImageManip run-on-host mode")
+    }
+
     pub fn set_backend(&self, backend: Backend) {
         clear_error_flag();
         unsafe { depthai::dai_image_manip_set_backend(self.node.handle(), c_int(backend as i32)) };
     }
 
+    /// Checked variant of [`Self::set_backend`].
+    pub fn try_set_backend(&self, backend: Backend) -> Result<()> {
+        clear_error_flag();
+        unsafe { depthai::dai_image_manip_set_backend(self.node.handle(), c_int(backend as i32)) };
+        check_void_result("failed to set ImageManip backend")
+    }
+
     pub fn set_performance_mode(&self, performance_mode: PerformanceMode) {
         clear_error_flag();
-        unsafe { depthai::dai_image_manip_set_performance_mode(self.node.handle(), c_int(performance_mode as i32)) };
+        unsafe {
+            depthai::dai_image_manip_set_performance_mode(
+                self.node.handle(),
+                c_int(performance_mode as i32),
+            )
+        };
+    }
+
+    /// Checked variant of [`Self::set_performance_mode`].
+    pub fn try_set_performance_mode(&self, performance_mode: PerformanceMode) -> Result<()> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_image_manip_set_performance_mode(
+                self.node.handle(),
+                c_int(performance_mode as i32),
+            )
+        };
+        check_void_result("failed to set ImageManip performance mode")
     }
 
     pub fn run_on_host(&self) -> Result<bool> {

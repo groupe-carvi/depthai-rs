@@ -105,6 +105,14 @@ impl ImageManipConfig {
         self.buffer.handle()
     }
 
+    fn mutation_result(&mut self, context: &str) -> Result<&mut Self> {
+        if let Some(err) = take_error_if_any(context) {
+            Err(err)
+        } else {
+            Ok(self)
+        }
+    }
+
     pub fn clear_ops(&mut self) -> &mut Self {
         clear_error_flag();
         unsafe { depthai::dai_image_manip_config_clear_ops(self.handle()) };
@@ -403,6 +411,14 @@ pub struct ImageManipNode {
 }
 
 impl ImageManipNode {
+    fn mutation_result(&self, context: &str) -> Result<()> {
+        if let Some(err) = take_error_if_any(context) {
+            Err(err)
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn set_num_frames_pool(&self, num_frames_pool: i32) {
         clear_error_flag();
         unsafe {

@@ -132,6 +132,10 @@ include_cpp! {
     generate!("dai::dai_input_get_reuse_previous_message")
     generate!("dai::dai_input_set_wait_for_message")
     generate!("dai::dai_input_get_wait_for_message")
+    generate!("dai::dai_input_set_blocking")
+    generate!("dai::dai_input_get_blocking")
+    generate!("dai::dai_input_set_max_size")
+    generate!("dai::dai_input_get_max_size")
 
     // Device helpers
     generate!("dai::dai_device_get_platform")

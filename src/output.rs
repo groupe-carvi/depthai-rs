@@ -152,6 +152,64 @@ impl Input {
         Self { pipeline, handle }
     }
 
+    /// Configure whether this node input blocks its producer when the queue is full.
+    ///
+    /// Mirrors C++: `dai::Node::Input::setBlocking(bool)` inherited from
+    /// `dai::MessageQueue`.
+    pub fn set_blocking(&self, blocking: bool) -> Result<()> {
+        clear_error_flag();
+        unsafe { depthai::dai_input_set_blocking(self.handle, blocking) };
+        if let Some(error) =
+            crate::error::take_error_if_any("failed to set node input blocking mode")
+        {
+            Err(error)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Return whether this node input blocks its producer when the queue is full.
+    pub fn blocking(&self) -> Result<bool> {
+        clear_error_flag();
+        let blocking = unsafe { depthai::dai_input_get_blocking(self.handle) };
+        if let Some(error) =
+            crate::error::take_error_if_any("failed to get node input blocking mode")
+        {
+            Err(error)
+        } else {
+            Ok(blocking)
+        }
+    }
+
+    /// Configure the maximum number of messages buffered by this node input.
+    ///
+    /// Mirrors C++: `dai::Node::Input::setMaxSize(unsigned int)` inherited from
+    /// `dai::MessageQueue`.
+    pub fn set_max_size(&self, max_size: u32) -> Result<()> {
+        clear_error_flag();
+        unsafe { depthai::dai_input_set_max_size(self.handle, c_uint(max_size)) };
+        if let Some(error) =
+            crate::error::take_error_if_any("failed to set node input maximum size")
+        {
+            Err(error)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Return the maximum number of messages buffered by this node input.
+    pub fn max_size(&self) -> Result<u32> {
+        clear_error_flag();
+        let max_size: u32 = unsafe { depthai::dai_input_get_max_size(self.handle) }.into();
+        if let Some(error) =
+            crate::error::take_error_if_any("failed to get node input maximum size")
+        {
+            Err(error)
+        } else {
+            Ok(max_size)
+        }
+    }
+
     pub fn get_buffer(&self) -> Result<Buffer> {
         clear_error_flag();
         let handle = unsafe { depthai::dai_input_get_buffer(self.handle) };

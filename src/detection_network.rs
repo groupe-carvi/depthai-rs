@@ -239,6 +239,720 @@ pub struct DetectionSegmentationMask {
     /// One byte per mask pixel.
     pub data: Vec<u8>,
 }
+
+#[crate::native_node_wrapper(native = "dai::node::DetectionParser")]
+/// A DepthAI-Core detection parser node.
+///
+/// The type can wrap a standalone parser or the parser subnode borrowed from a
+/// [`DetectionNetworkNode`]. Group-level DetectionNetwork methods should be
+/// used when parser and neural-network configuration must remain synchronized.
+pub struct DetectionParserNode {
+    node: crate::pipeline::Node,
+}
+
+impl DetectionParserNode {
+    pub(crate) fn from_node(node: crate::pipeline::Node) -> Self {
+        Self { node }
+    }
+
+    /// Returns the parser input port for `NNData`.
+    pub fn input(&self) -> Result<Input> {
+        self.as_node().input("in")
+    }
+
+    /// Returns the parser output port, which emits [`ImgDetections`] messages.
+    pub fn out(&self) -> Result<Output> {
+        self.as_node().output("out")
+    }
+
+    /// Configure whether parser decoding runs on the host.
+    pub fn set_run_on_host(&self, run_on_host: bool) -> Result<()> {
+        clear_error_flag();
+        unsafe { depthai::dai_detection_parser_set_run_on_host(self.node.handle(), run_on_host) };
+        if let Some(error) = take_error_if_any("failed to set DetectionParserNode run on host") {
+            Err(error)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Returns whether parser decoding is configured to run on the host.
+    pub fn run_on_host(&self) -> Result<bool> {
+        clear_error_flag();
+        let run = unsafe { depthai::dai_detection_parser_run_on_host(self.node.handle()) };
+        if let Some(error) =
+            take_error_if_any("failed to get DetectionParserNode run on host value")
+        {
+            Err(error)
+        } else {
+            Ok(run)
+        }
+    }
+
+    /// Builds the parser from an `NNData` output and an [`NNArchive`].
+    ///
+    /// The archive configures parser metadata and the output is linked to the
+    /// parser input. This method and the parser setters below configure only
+    /// this parser. A parser obtained from [`DetectionNetworkNode`] does not
+    /// synchronize its sibling neural network; use the group-level build,
+    /// archive, or model methods when both subnodes must remain synchronized.
+    pub fn build_from_output(&self, output: &Output, archive: &NNArchive) -> Result<()> {
+        clear_error_flag();
+
+        let built = unsafe {
+            depthai::dai_detection_parser_build_from_output(
+                self.node.handle(),
+                output.handle(),
+                archive.handle(),
+            )
+        };
+
+        if built {
+            Ok(())
+        } else {
+            Err(last_error(
+                "failed to build DetectionParserNode from output",
+            ))
+        }
+    }
+
+    /// Sets the number of frames retained by the parser pool.
+    pub fn set_num_frames_pool(&self, num_frames: i32) -> Result<()> {
+        clear_error_flag();
+
+        unsafe {
+            depthai::dai_detection_parser_set_num_frames_pool(self.node.handle(), num_frames.into())
+        };
+
+        check_void_result("failed to set DetectionParserNode frame pool size")
+    }
+
+    /// Returns the number of frames retained by the parser pool.
+    pub fn num_frames_pool(&self) -> Result<i32> {
+        clear_error_flag();
+
+        let num_frames: i32 =
+            unsafe { depthai::dai_detection_parser_get_num_frames_pool(self.node.handle()) }.into();
+
+        if let Some(error) = take_error_if_any("failed to get DetectionParserNode frame pool size")
+        {
+            Err(error)
+        } else {
+            Ok(num_frames)
+        }
+    }
+
+    /// Configures the parser from an [`NNArchive`].
+    ///
+    /// Applying an archive replaces per-head parser settings, including
+    /// family, subtype, confidence/classes, coordinate size, anchors, masks,
+    /// strides, output-name selection, and keypoint/segmentation
+    /// configuration. Core selects the last head in the supported family and
+    /// rejects archives containing both supported families or no supported
+    /// detection head. It does not reset the frame pool or host-run choice;
+    /// IoU changes only when the archive supplies it. BLOB/SUPERBLOB archives
+    /// replace input metadata, while DLC/OTHER archives leave existing input
+    /// metadata unchanged. Apply manual overrides afterward when they should
+    /// take precedence.
+    ///
+    /// DetectionParser configuration and query methods require DepthAI-Core
+    /// v3.8.0. Older selected Core versions return an unsupported-version
+    /// error.
+    pub fn set_nn_archive(&self, archive: &NNArchive) -> Result<()> {
+        clear_error_flag();
+
+        unsafe {
+            depthai::dai_detection_parser_set_nn_archive(self.node.handle(), archive.handle())
+        };
+
+        check_void_result("failed to set DetectionParserNode NNArchive")
+    }
+
+    /// Configures parser model metadata from a filesystem path.
+    ///
+    /// Only paths recognized as `NNArchive` configure this parser. Recognized
+    /// BLOB, SUPERBLOB, DLC, and OTHER paths are no-ops: they do not change
+    /// parser decoding settings or input metadata. Use the blob setters for
+    /// blob input metadata.
+    pub fn set_model_path(&self, path: impl AsRef<Path>) -> Result<()> {
+        let path = path
+            .as_ref()
+            .to_str()
+            .ok_or_else(|| DepthaiError::new("DetectionParser model path is not valid UTF-8"))?;
+
+        let path = CString::new(path)
+            .map_err(|_| DepthaiError::new("DetectionParser model path contains NUL"))?;
+
+        clear_error_flag();
+
+        unsafe { depthai::dai_detection_parser_set_model_path(self.node.handle(), path.as_ptr()) };
+
+        check_void_result("failed to set DetectionParser model path")
+    }
+
+    /// Configures parser input metadata from a blob file.
+    ///
+    /// This replaces only the input metadata; it does not configure parser
+    /// family, classes, thresholds, anchors, or subtype. It also replaces
+    /// previously configured explicit dimensions. Use this or
+    /// [`Self::set_input_image_size`] to provide input metadata.
+    pub fn set_blob_path(&self, path: impl AsRef<Path>) -> Result<()> {
+        let path = path
+            .as_ref()
+            .to_str()
+            .ok_or_else(|| DepthaiError::new("DetectionParser blob path is not valid UTF-8"))?;
+
+        let path = CString::new(path)
+            .map_err(|_| DepthaiError::new("DetectionParser blob path contains NUL"))?;
+
+        clear_error_flag();
+
+        unsafe { depthai::dai_detection_parser_set_blob_path(self.node.handle(), path.as_ptr()) };
+
+        check_void_result("failed to set DetectionParser blob path")
+    }
+
+    /// Configures parser input metadata from encoded blob bytes.
+    ///
+    /// This replaces only the input metadata and does not configure parser
+    /// decoding options. It also replaces previously configured explicit
+    /// dimensions.
+    pub fn set_blob_bytes(&self, bytes: &[u8]) -> Result<()> {
+        clear_error_flag();
+
+        unsafe {
+            depthai::dai_detection_parser_set_blob_bytes(
+                self.node.handle(),
+                bytes.as_ptr() as *const _,
+                bytes.len(),
+            )
+        };
+
+        check_void_result("failed to set DetectionParser blob bytes")
+    }
+
+    /// Sets parser input dimensions as an alternative to blob metadata.
+    ///
+    /// Dimensions must be positive. Core applies this only while input
+    /// metadata is empty. Once input metadata exists, Core logs an error and
+    /// ignores later calls without setting the Rust error slot, so `Ok(())`
+    /// does not guarantee a state change. A blob setter replaces existing
+    /// input metadata, including explicit dimensions, so choose either a blob
+    /// setter or dimensions.
+    pub fn set_input_image_size(&self, width: u32, height: u32) -> Result<()> {
+        let width = i32::try_from(width).map_err(|_| {
+            DepthaiError::new("DetectionParser input image width exceeds native i32 range")
+        })?;
+        let height = i32::try_from(height).map_err(|_| {
+            DepthaiError::new("DetectionParser input image height exceeds native i32 range")
+        })?;
+
+        clear_error_flag();
+
+        unsafe {
+            depthai::dai_detection_parser_set_input_image_size(
+                self.node.handle(),
+                width.into(),
+                height.into(),
+            )
+        };
+
+        check_void_result("failed to set DetectionParser input image size")
+    }
+
+    /// Sets the detection family used by the parser.
+    ///
+    /// The supported families are [`DetectionNetworkType::Yolo`] and
+    /// [`DetectionNetworkType::Mobilenet`].
+    pub fn set_nn_family(&self, family: DetectionNetworkType) -> Result<()> {
+        clear_error_flag();
+
+        unsafe {
+            depthai::dai_detection_parser_set_nn_family(self.node.handle(), (family as i32).into())
+        };
+
+        check_void_result("failed to set DetectionParser NN family")
+    }
+
+    /// Returns the detection family used by the parser.
+    pub fn nn_family(&self) -> Result<DetectionNetworkType> {
+        clear_error_flag();
+
+        let raw_family: i32 =
+            unsafe { depthai::dai_detection_parser_get_nn_family(self.node.handle()) }.into();
+
+        if let Some(error) = take_error_if_any("failed to get DetectionParser NN family") {
+            return Err(error);
+        }
+
+        DetectionNetworkType::from_raw(raw_family).ok_or_else(|| {
+            DepthaiError::new(format!(
+                "unknown DetectionNetworkType returned by depthai-core: {raw_family}"
+            ))
+        })
+    }
+
+    /// Sets the detection confidence threshold.
+    ///
+    /// A standalone parser starts at `0.0`. A parser inside a newly created
+    /// [`DetectionNetworkNode`] starts at `0.5`; applying an archive resets it
+    /// to `0.0` before applying an optional archive threshold.
+    pub fn set_confidence_threshold(&self, threshold: f32) -> Result<()> {
+        clear_error_flag();
+
+        unsafe {
+            depthai::dai_detection_parser_set_confidence_threshold(self.node.handle(), threshold)
+        };
+
+        check_void_result("failed to set DetectionParser confidence threshold")
+    }
+
+    /// Returns the detection confidence threshold.
+    pub fn confidence_threshold(&self) -> Result<f32> {
+        clear_error_flag();
+
+        let threshold =
+            unsafe { depthai::dai_detection_parser_get_confidence_threshold(self.node.handle()) };
+
+        if let Some(error) = take_error_if_any("failed to get DetectionParser confidence threshold")
+        {
+            Err(error)
+        } else {
+            Ok(threshold)
+        }
+    }
+
+    /// Sets the number of classes used by the parser.
+    ///
+    /// Existing class names are not cleared by this operation.
+    pub fn set_num_classes(&self, num_classes: i32) -> Result<()> {
+        clear_error_flag();
+
+        unsafe {
+            depthai::dai_detection_parser_set_num_classes(self.node.handle(), num_classes.into())
+        };
+
+        check_void_result("failed to set DetectionParser class count")
+    }
+
+    /// Returns the number of classes used by the parser.
+    pub fn num_classes(&self) -> Result<i32> {
+        clear_error_flag();
+
+        let num_classes: i32 =
+            unsafe { depthai::dai_detection_parser_get_num_classes(self.node.handle()) }.into();
+
+        if let Some(error) = take_error_if_any("failed to get DetectionParser class count") {
+            Err(error)
+        } else {
+            Ok(num_classes)
+        }
+    }
+
+    /// Sets the class names used by the parser.
+    ///
+    /// Core also updates the class count to match `classes.len()`.
+    pub fn set_classes(&self, classes: &[String]) -> Result<()> {
+        let json = serde_json::to_string(classes).map_err(|error| {
+            DepthaiError::new(format!(
+                "failed to serialize DetectionParser class names: {error}"
+            ))
+        })?;
+
+        let json = CString::new(json)
+            .map_err(|_| DepthaiError::new("DetectionParser class names JSON contains NUL"))?;
+
+        clear_error_flag();
+
+        unsafe {
+            depthai::dai_detection_parser_set_classes_json(self.node.handle(), json.as_ptr())
+        };
+
+        check_void_result("failed to set DetectionParser class names")
+    }
+
+    /// Returns the configured class names.
+    ///
+    /// Returns `Ok(None)` when no class-name list is configured. An explicit
+    /// empty list returns `Ok(Some(vec![]))`.
+    pub fn classes(&self) -> Result<Option<Vec<String>>> {
+        clear_error_flag();
+
+        let json = unsafe { depthai::dai_detection_parser_get_classes_json(self.node.handle()) };
+
+        parse_owned_json(json, "failed to get DetectionParser class names")
+    }
+
+    /// Sets the number of coordinates in each parsed bounding box.
+    pub fn set_coordinate_size(&self, coordinate_size: i32) -> Result<()> {
+        clear_error_flag();
+
+        unsafe {
+            depthai::dai_detection_parser_set_coordinate_size(
+                self.node.handle(),
+                coordinate_size.into(),
+            )
+        };
+
+        check_void_result("failed to set DetectionParser coordinate size")
+    }
+
+    /// Returns the number of coordinates in each parsed bounding box.
+    ///
+    /// A standalone parser reports `0` before configuration; archive
+    /// configuration normally sets this value to `4`.
+    pub fn coordinate_size(&self) -> Result<i32> {
+        clear_error_flag();
+
+        let coordinate_size: i32 =
+            unsafe { depthai::dai_detection_parser_get_coordinate_size(self.node.handle()) }.into();
+
+        if let Some(error) = take_error_if_any("failed to get DetectionParser coordinate size") {
+            Err(error)
+        } else {
+            Ok(coordinate_size)
+        }
+    }
+
+    /// Sets the IoU threshold used by non-maximum suppression.
+    pub fn set_iou_threshold(&self, threshold: f32) -> Result<()> {
+        clear_error_flag();
+
+        unsafe { depthai::dai_detection_parser_set_iou_threshold(self.node.handle(), threshold) };
+
+        check_void_result("failed to set DetectionParser IoU threshold")
+    }
+
+    /// Returns the IoU threshold used by non-maximum suppression.
+    pub fn iou_threshold(&self) -> Result<f32> {
+        clear_error_flag();
+
+        let threshold =
+            unsafe { depthai::dai_detection_parser_get_iou_threshold(self.node.handle()) };
+
+        if let Some(error) = take_error_if_any("failed to get DetectionParser IoU threshold") {
+            Err(error)
+        } else {
+            Ok(threshold)
+        }
+    }
+
+    /// Sets the YOLO subtype used by Core to select its decoding family.
+    ///
+    /// Core resolves known subtype names case-insensitively. Unknown names are
+    /// logged and fall back to TLBR decoding.
+    pub fn set_subtype(&self, subtype: &str) -> Result<()> {
+        let subtype = CString::new(subtype)
+            .map_err(|_| DepthaiError::new("DetectionParser subtype contains NUL"))?;
+
+        clear_error_flag();
+
+        unsafe { depthai::dai_detection_parser_set_subtype(self.node.handle(), subtype.as_ptr()) };
+
+        check_void_result("failed to set DetectionParser subtype")
+    }
+
+    /// Returns the configured parser subtype.
+    pub fn subtype(&self) -> Result<String> {
+        clear_error_flag();
+
+        let subtype = unsafe { depthai::dai_detection_parser_get_subtype(self.node.handle()) };
+
+        take_owned_string(subtype, "failed to get DetectionParser subtype")
+    }
+
+    /// Enables or disables keypoint decoding.
+    ///
+    /// A keypoint count must be configured before enabling decoding.
+    pub fn set_decode_keypoints(&self, decode: bool) -> Result<()> {
+        clear_error_flag();
+
+        unsafe { depthai::dai_detection_parser_set_decode_keypoints(self.node.handle(), decode) };
+
+        check_void_result("failed to set DetectionParser keypoint decoding")
+    }
+
+    /// Returns whether keypoint decoding is enabled.
+    pub fn decode_keypoints(&self) -> Result<bool> {
+        clear_error_flag();
+
+        let decode =
+            unsafe { depthai::dai_detection_parser_get_decode_keypoints(self.node.handle()) };
+
+        if let Some(error) = take_error_if_any("failed to get DetectionParser keypoint decoding") {
+            Err(error)
+        } else {
+            Ok(decode)
+        }
+    }
+
+    /// Enables or disables segmentation decoding.
+    ///
+    /// The parser normally runs on the device. On RVC2, Core automatically
+    /// selects host execution during pipeline setup when segmentation decoding
+    /// is enabled unless [`Self::set_run_on_host`] was called explicitly.
+    pub fn set_decode_segmentation(&self, decode: bool) -> Result<()> {
+        clear_error_flag();
+
+        unsafe {
+            depthai::dai_detection_parser_set_decode_segmentation(self.node.handle(), decode)
+        };
+
+        check_void_result("failed to set DetectionParser segmentation decoding")
+    }
+
+    /// Returns whether segmentation decoding is enabled.
+    pub fn decode_segmentation(&self) -> Result<bool> {
+        clear_error_flag();
+
+        let decode =
+            unsafe { depthai::dai_detection_parser_get_decode_segmentation(self.node.handle()) };
+
+        if let Some(error) =
+            take_error_if_any("failed to get DetectionParser segmentation decoding")
+        {
+            Err(error)
+        } else {
+            Ok(decode)
+        }
+    }
+
+    /// Sets the number of keypoints to decode.
+    ///
+    /// Decoded keypoints are ordered by model index, from `0` through
+    /// `num_keypoints - 1`; keypoint edges use these zero-based indices.
+    /// Setting this value also enables keypoint decoding.
+    pub fn set_num_keypoints(&self, num_keypoints: i32) -> Result<()> {
+        clear_error_flag();
+
+        unsafe {
+            depthai::dai_detection_parser_set_num_keypoints(
+                self.node.handle(),
+                num_keypoints.into(),
+            )
+        };
+
+        check_void_result("failed to set DetectionParser keypoint count")
+    }
+
+    /// Returns the configured number of keypoints, or `0` if none is set.
+    pub fn num_keypoints(&self) -> Result<i32> {
+        clear_error_flag();
+
+        let num_keypoints: i32 =
+            unsafe { depthai::dai_detection_parser_get_num_keypoints(self.node.handle()) }.into();
+
+        if let Some(error) = take_error_if_any("failed to get DetectionParser keypoint count") {
+            Err(error)
+        } else {
+            Ok(num_keypoints)
+        }
+    }
+
+    /// Sets the deprecated flattened YOLO anchor representation.
+    ///
+    /// Use [`Self::set_anchors_v2`] for new code.
+    #[deprecated(note = "use set_anchors_v2 instead")]
+    pub fn set_anchors(&self, anchors: &[f32]) -> Result<()> {
+        let json = serde_json::to_string(anchors).map_err(|error| {
+            DepthaiError::new(format!(
+                "failed to serialize DetectionParser legacy anchors: {error}"
+            ))
+        })?;
+
+        let json = CString::new(json)
+            .map_err(|_| DepthaiError::new("DetectionParser legacy anchors JSON contains NUL"))?;
+
+        clear_error_flag();
+
+        unsafe {
+            depthai::dai_detection_parser_set_anchors_legacy_json(self.node.handle(), json.as_ptr())
+        };
+
+        check_void_result("failed to set DetectionParser legacy anchors")
+    }
+
+    /// Returns the configured flattened YOLO anchors.
+    pub fn anchors(&self) -> Result<Vec<f32>> {
+        clear_error_flag();
+
+        let json = unsafe { depthai::dai_detection_parser_get_anchors_json(self.node.handle()) };
+
+        parse_owned_json(json, "failed to get DetectionParser legacy anchors")
+    }
+
+    /// Sets nested v2 YOLO anchors as `[layer][anchor][width, height]`.
+    ///
+    /// DepthAI-Core does not expose a getter for this representation.
+    pub fn set_anchors_v2(&self, anchors: &[Vec<[f32; 2]>]) -> Result<()> {
+        let json = serde_json::to_string(anchors).map_err(|error| {
+            DepthaiError::new(format!(
+                "failed to serialize DetectionParser v2 anchors: {error}"
+            ))
+        })?;
+
+        let json = CString::new(json)
+            .map_err(|_| DepthaiError::new("DetectionParser v2 anchors JSON contains NUL"))?;
+
+        clear_error_flag();
+
+        unsafe {
+            depthai::dai_detection_parser_set_anchors_v2_json(self.node.handle(), json.as_ptr())
+        };
+
+        check_void_result("failed to set DetectionParser v2 anchors")
+    }
+
+    /// Sets the named anchor masks used by YOLO decoding.
+    pub fn set_anchor_masks(&self, anchor_masks: &BTreeMap<String, Vec<i32>>) -> Result<()> {
+        let json = serde_json::to_string(anchor_masks).map_err(|error| {
+            DepthaiError::new(format!(
+                "failed to serialize DetectionParser anchor masks: {error}"
+            ))
+        })?;
+
+        let json = CString::new(json)
+            .map_err(|_| DepthaiError::new("DetectionParser anchor masks JSON contains NUL"))?;
+
+        clear_error_flag();
+
+        unsafe {
+            depthai::dai_detection_parser_set_anchor_masks_json(self.node.handle(), json.as_ptr())
+        };
+
+        check_void_result("failed to set DetectionParser anchor masks")
+    }
+
+    /// Returns the configured named anchor masks.
+    pub fn anchor_masks(&self) -> Result<BTreeMap<String, Vec<i32>>> {
+        clear_error_flag();
+
+        let json =
+            unsafe { depthai::dai_detection_parser_get_anchor_masks_json(self.node.handle()) };
+
+        parse_owned_json(json, "failed to get DetectionParser anchor masks")
+    }
+
+    /// Sets the YOLO stride values.
+    pub fn set_strides(&self, strides: &[i32]) -> Result<()> {
+        let json = serde_json::to_string(strides).map_err(|error| {
+            DepthaiError::new(format!(
+                "failed to serialize DetectionParser strides: {error}"
+            ))
+        })?;
+
+        let json = CString::new(json)
+            .map_err(|_| DepthaiError::new("DetectionParser strides JSON contains NUL"))?;
+
+        clear_error_flag();
+
+        unsafe {
+            depthai::dai_detection_parser_set_strides_json(self.node.handle(), json.as_ptr())
+        };
+
+        check_void_result("failed to set DetectionParser strides")
+    }
+
+    /// Returns the YOLO stride values.
+    pub fn strides(&self) -> Result<Vec<i32>> {
+        clear_error_flag();
+
+        let json = unsafe { depthai::dai_detection_parser_get_strides_json(self.node.handle()) };
+
+        parse_owned_json(json, "failed to get DetectionParser strides")
+    }
+
+    /// Sets the keypoint skeleton edges.
+    ///
+    /// Each edge is a pair of zero-based indices into the decoded keypoint
+    /// vector (`0..num_keypoints`). The setter validates the JSON shape, while
+    /// Core checks index bounds and self-loops later when constructing decoded
+    /// keypoint output. Invalid edges may therefore fail during decoding
+    /// rather than in this call. Edges apply only when keypoint decoding is
+    /// enabled, and DepthAI-Core does not expose a getter for this setting.
+    pub fn set_keypoint_edges(&self, edges: &[[u32; 2]]) -> Result<()> {
+        let json = serde_json::to_string(edges).map_err(|error| {
+            DepthaiError::new(format!(
+                "failed to serialize DetectionParser keypoint edges: {error}"
+            ))
+        })?;
+
+        let json = CString::new(json)
+            .map_err(|_| DepthaiError::new("DetectionParser keypoint edges JSON contains NUL"))?;
+
+        clear_error_flag();
+
+        unsafe {
+            depthai::dai_detection_parser_set_keypoint_edges_json(self.node.handle(), json.as_ptr())
+        };
+
+        check_void_result("failed to set DetectionParser keypoint edges")
+    }
+}
+/// Detection parser family supported by DepthAI-Core.
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DetectionNetworkType {
+    Yolo = 0,
+    Mobilenet = 1,
+}
+
+impl DetectionNetworkType {
+    pub const fn from_raw(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Yolo),
+            1 => Some(Self::Mobilenet),
+            _ => None,
+        }
+    }
+}
+
+fn check_void_result(context: &str) -> Result<()> {
+    match take_error_if_any(context) {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
+}
+
+fn parse_owned_json<T>(json: *mut std::ffi::c_char, context: &str) -> Result<T>
+where
+    T: serde::de::DeserializeOwned,
+{
+    if json.is_null() {
+        return Err(last_error(context));
+    }
+
+    let text = unsafe { std::ffi::CStr::from_ptr(json) }
+        .to_string_lossy()
+        .into_owned();
+
+    unsafe { depthai::dai_free_cstring(json) };
+
+    if let Some(error) = take_error_if_any(context) {
+        return Err(error);
+    }
+
+    serde_json::from_str(&text).map_err(|error| DepthaiError::new(format!("{context}: {error}")))
+}
+
+fn take_owned_string(value: *mut std::ffi::c_char, context: &str) -> Result<String> {
+    if value.is_null() {
+        return Err(last_error(context));
+    }
+
+    let text = unsafe { std::ffi::CStr::from_ptr(value) }
+        .to_string_lossy()
+        .into_owned();
+
+    unsafe { depthai::dai_free_cstring(value) };
+
+    if let Some(error) = take_error_if_any(context) {
+        return Err(error);
+    }
+
+    Ok(text)
+}
+
 #[cfg(test)]
 mod tests {
     use super::ImgDetection;

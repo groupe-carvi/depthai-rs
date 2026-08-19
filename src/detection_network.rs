@@ -889,6 +889,7 @@ impl DetectionParserNode {
         check_void_result("failed to set DetectionParser keypoint edges")
     }
 }
+
 #[crate::native_node_wrapper(native = "dai::node::DetectionNetwork")]
 /// A detection network composed of a neural network and detection parser.
 ///
@@ -900,6 +901,170 @@ pub struct DetectionNetworkNode {
 }
 
 impl DetectionNetworkNode {
+    /// Builds the detection network from an existing `NNData` output.
+    pub fn build_from_output(&self, output: &Output, archive: &NNArchive) -> Result<()> {
+        clear_error_flag();
+        let ok = unsafe {
+            depthai::dai_detection_network_build_from_output(
+                self.node.handle(),
+                output.handle(),
+                archive.handle(),
+            )
+        };
+
+        if ok {
+            Ok(())
+        } else {
+            Err(last_error(
+                "failed to build detection network node from output",
+            ))
+        }
+    }
+
+    /// Builds the detection network from a model description and camera.
+    ///
+    /// The camera must already be built. Core configures both subnodes,
+    /// requests the required camera output, and links the group internally.
+    pub fn build_from_camera_model(
+        &self,
+        camera: &CameraNode,
+        model: &NNModelDescription,
+        fps: Option<f32>,
+        resize_mode: Option<ResizeMode>,
+    ) -> Result<()> {
+        let model_json = serde_json::to_string(model).map_err(|e| {
+            DepthaiError::new(format!("failed to serialize model description: {e}"))
+        })?;
+        let model_c = CString::new(model_json)
+            .map_err(|_| DepthaiError::new("model description contains NUL"))?;
+        let fps_c = fps.unwrap_or(-1.0);
+        let resize_c = resize_mode.map(|mode| mode as i32).unwrap_or(-1);
+
+        clear_error_flag();
+        let ok = unsafe {
+            depthai::dai_detection_network_build_from_camera_model_json(
+                self.node.handle(),
+                camera.as_node().handle() as DaiCameraNode,
+                model_c.as_ptr(),
+                fps_c,
+                c_int(resize_c),
+            )
+        };
+
+        if ok {
+            Ok(())
+        } else {
+            Err(last_error(
+                "failed to build detection network from camera model",
+            ))
+        }
+    }
+
+    /// Builds the detection network from an [`NNArchive`] and camera.
+    ///
+    /// The camera must already be built. Core configures both subnodes,
+    /// requests the required camera output, and links the group internally.
+    pub fn build_from_camera_archive(
+        &self,
+        camera: &CameraNode,
+        archive: &NNArchive,
+        fps: Option<f32>,
+        resize_mode: Option<ResizeMode>,
+    ) -> Result<()> {
+        let fps_c = fps.unwrap_or(-1.0);
+        let resize_c = resize_mode.map(|mode| mode as i32).unwrap_or(-1);
+
+        clear_error_flag();
+        let ok = unsafe {
+            depthai::dai_detection_network_build_from_camera_archive(
+                self.node.handle(),
+                camera.as_node().handle() as DaiCameraNode,
+                archive.handle(),
+                fps_c,
+                c_int(resize_c),
+            )
+        };
+
+        if ok {
+            Ok(())
+        } else {
+            Err(last_error(
+                "failed to build detection network from camera archive",
+            ))
+        }
+    }
+
+    /// Builds the detection network from a model description and camera
+    /// capability constraints.
+    ///
+    /// The camera must already be built. Core configures both subnodes and
+    /// links the group internally. In Core v3.8, the model input determines
+    /// the final frame size and type.
+    pub fn build_from_camera_model_with_capability(
+        &self,
+        camera: &CameraNode,
+        model: &NNModelDescription,
+        capability: &ImgFrameCapability,
+    ) -> Result<()> {
+        let model_json = serde_json::to_string(model).map_err(|error| {
+            DepthaiError::new(format!("failed to serialize model description: {error}"))
+        })?;
+        let model_c = CString::new(model_json)
+            .map_err(|_| DepthaiError::new("model description contains NUL"))?;
+        let capability_c = capability.to_ffi_json()?;
+
+        clear_error_flag();
+        let ok = unsafe {
+            depthai::dai_detection_network_build_from_camera_model_capability_json(
+                self.node.handle(),
+                camera.as_node().handle() as DaiCameraNode,
+                model_c.as_ptr(),
+                capability_c.as_ptr(),
+            )
+        };
+
+        if ok {
+            Ok(())
+        } else {
+            Err(last_error(
+                "failed to build detection network from camera model capability",
+            ))
+        }
+    }
+
+    /// Builds the detection network from an [`NNArchive`] and camera capability
+    /// constraints.
+    ///
+    /// The camera must already be built. Core configures both subnodes and
+    /// links the group internally. In Core v3.8, the model input determines
+    /// the final frame size and type.
+    pub fn build_from_camera_archive_with_capability(
+        &self,
+        camera: &CameraNode,
+        archive: &NNArchive,
+        capability: &ImgFrameCapability,
+    ) -> Result<()> {
+        let capability_c = capability.to_ffi_json()?;
+
+        clear_error_flag();
+        let ok = unsafe {
+            depthai::dai_detection_network_build_from_camera_archive_capability_json(
+                self.node.handle(),
+                camera.as_node().handle() as DaiCameraNode,
+                archive.handle(),
+                capability_c.as_ptr(),
+            )
+        };
+
+        if ok {
+            Ok(())
+        } else {
+            Err(last_error(
+                "failed to build detection network from camera archive capability",
+            ))
+        }
+    }
+
     /// Returns the neural-network input alias.
     ///
     /// This alias is owned by the group's neural-network subnode.

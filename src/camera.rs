@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::ffi::CString;
 use std::time::{Duration, SystemTime};
 
 use autocxx::c_int;
@@ -8,7 +9,7 @@ pub use crate::common::{
     CameraBoardSocket, CameraExposureOffset, CameraImageOrientation, CameraSensorType,
     ImageFrameType, ResizeMode,
 };
-use crate::error::{Result, clear_error_flag, last_error, take_error_if_any};
+use crate::error::{DepthaiError, Result, clear_error_flag, last_error, take_error_if_any};
 use crate::pipeline::device_node::CreateInPipelineWith;
 use crate::pipeline::{Pipeline, PipelineInner};
 use crate::output::Output as NodeOutput;
@@ -90,6 +91,106 @@ impl CameraOutputConfig {
             size,
             ..Default::default()
         }
+    }
+}
+
+/// A fixed, ranged, or discrete camera capability constraint.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum CapabilityConstraint<T> {
+    /// Require one fixed value.
+    Fixed { value: T },
+    /// Accept values between `min` and `max`.
+    Range { min: T, max: T },
+    /// Accept one of the listed values.
+    Discrete { values: Vec<T> },
+}
+
+/// Camera-frame capability constraints used by DetectionNetwork builds.
+///
+/// These values describe requested camera capabilities. In DepthAI-Core v3.8,
+/// the model input determines the final frame size and type, so `size` and
+/// `frame_type` do not guarantee the resulting output settings.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImgFrameCapability {
+    /// Supported image-size constraint.
+    pub size: Option<CapabilityConstraint<(u32, u32)>>,
+    /// Supported frame-rate constraint.
+    pub fps: Option<CapabilityConstraint<f32>>,
+    /// Requested image format.
+    pub frame_type: Option<ImageFrameType>,
+    /// Resize mode applied to the camera output.
+    pub resize_mode: ResizeMode,
+    /// Whether undistortion is enabled.
+    pub enable_undistortion: Option<bool>,
+    /// Whether ISP output is requested.
+    pub isp_output: bool,
+}
+
+impl ImgFrameCapability {
+    pub(crate) fn to_ffi_json(&self) -> Result<CString> {
+        if let Some(fps) = self.fps.as_ref() {
+            validate_finite_fps(fps)?;
+        }
+
+        let wire = ImgFrameCapabilityWire {
+            size: self.size.as_ref(),
+            fps: self.fps.as_ref(),
+            frame_type: self.frame_type.map(|value| value as i32),
+            resize_mode: self.resize_mode as i32,
+            enable_undistortion: self.enable_undistortion,
+            isp_output: self.isp_output,
+        };
+
+        let json = serde_json::to_string(&wire).map_err(|error| {
+            DepthaiError::new(format!(
+                "failed to serialize ImgFrameCapability for DetectionNetwork: {error}"
+            ))
+        })?;
+
+        CString::new(json).map_err(|_| {
+            DepthaiError::new("serialized ImgFrameCapability JSON contains an interior NUL")
+        })
+    }
+}
+
+impl Default for ImgFrameCapability {
+    fn default() -> Self {
+        Self {
+            size: None,
+            fps: None,
+            frame_type: None,
+            resize_mode: ResizeMode::Crop,
+            enable_undistortion: None,
+            isp_output: false,
+        }
+    }
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ImgFrameCapabilityWire<'a> {
+    size: Option<&'a CapabilityConstraint<(u32, u32)>>,
+    fps: Option<&'a CapabilityConstraint<f32>>,
+    #[serde(rename = "type")]
+    frame_type: Option<i32>,
+    resize_mode: i32,
+    enable_undistortion: Option<bool>,
+    isp_output: bool,
+}
+
+fn validate_finite_fps(value: &CapabilityConstraint<f32>) -> Result<()> {
+    let valid = match value {
+        CapabilityConstraint::Fixed { value } => value.is_finite(),
+        CapabilityConstraint::Range { min, max } => min.is_finite() && max.is_finite(),
+        CapabilityConstraint::Discrete { values } => values.iter().all(|value| value.is_finite()),
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err(DepthaiError::new(
+            "ImgFrameCapability FPS values must be finite JSON numbers",
+        ))
     }
 }
 
@@ -747,5 +848,115 @@ impl ImageFrame {
 impl CreateInPipelineWith<CameraBoardSocket> for CameraNode {
     fn create_with(pipeline: &Pipeline, socket: CameraBoardSocket) -> Result<Self> {
         pipeline.create_camera(socket)
+    }
+}
+
+#[cfg(test)]
+mod detection_schema_tests {
+    use super::{CapabilityConstraint, ImageFrameType, ImgFrameCapability, ResizeMode};
+    use serde_json::{Value, json};
+
+    #[test]
+    fn detection_schema_capability_variants() {
+        let cases = [
+            (
+                CapabilityConstraint::Fixed { value: (640, 480) },
+                CapabilityConstraint::Fixed { value: 30.0 },
+                json!({"kind": "fixed", "value": [640, 480]}),
+                json!({"kind": "fixed", "value": 30.0}),
+            ),
+            (
+                CapabilityConstraint::Range {
+                    min: (320, 240),
+                    max: (1280, 720),
+                },
+                CapabilityConstraint::Range {
+                    min: 15.0,
+                    max: 60.0,
+                },
+                json!({"kind": "range", "min": [320, 240], "max": [1280, 720]}),
+                json!({"kind": "range", "min": 15.0, "max": 60.0}),
+            ),
+            (
+                CapabilityConstraint::Discrete {
+                    values: vec![(300, 300), (640, 640)],
+                },
+                CapabilityConstraint::Discrete {
+                    values: vec![24.0, 30.0, 60.0],
+                },
+                json!({"kind": "discrete", "values": [[300, 300], [640, 640]]}),
+                json!({"kind": "discrete", "values": [24.0, 30.0, 60.0]}),
+            ),
+        ];
+
+        for (size, fps, expected_size, expected_fps) in cases {
+            let capability = ImgFrameCapability {
+                size: Some(size),
+                fps: Some(fps),
+                frame_type: Some(ImageFrameType::RGB888i),
+                resize_mode: ResizeMode::Letterbox,
+                enable_undistortion: Some(true),
+                isp_output: true,
+            };
+            let encoded = capability
+                .to_ffi_json()
+                .expect("valid capability must serialize");
+            let wire: Value = serde_json::from_slice(encoded.as_bytes())
+                .expect("serialized capability must be JSON");
+            let object = wire.as_object().expect("capability root must be an object");
+
+            for key in [
+                "size",
+                "fps",
+                "type",
+                "resizeMode",
+                "enableUndistortion",
+                "ispOutput",
+            ] {
+                assert!(object.contains_key(key), "missing capability key {key}");
+            }
+            assert!(!object.contains_key("frame_type"));
+            assert!(!object.contains_key("resize_mode"));
+            assert_eq!(wire["size"], expected_size);
+            assert_eq!(wire["fps"], expected_fps);
+            assert_eq!(wire["type"], json!(ImageFrameType::RGB888i as i32));
+            assert_eq!(wire["resizeMode"], json!(ResizeMode::Letterbox as i32));
+        }
+    }
+
+    #[test]
+    fn detection_schema_rejects_non_finite_fps() {
+        let invalid_constraints = [
+            CapabilityConstraint::Fixed { value: f32::NAN },
+            CapabilityConstraint::Fixed {
+                value: f32::INFINITY,
+            },
+            CapabilityConstraint::Fixed {
+                value: f32::NEG_INFINITY,
+            },
+            CapabilityConstraint::Range {
+                min: f32::NAN,
+                max: 30.0,
+            },
+            CapabilityConstraint::Range {
+                min: 15.0,
+                max: f32::INFINITY,
+            },
+            CapabilityConstraint::Discrete {
+                values: vec![15.0, f32::NEG_INFINITY, 60.0],
+            },
+        ];
+
+        for fps in invalid_constraints {
+            let capability = ImgFrameCapability {
+                fps: Some(fps),
+                ..ImgFrameCapability::default()
+            };
+
+            assert!(
+                capability.to_ffi_json().is_err(),
+                "non-finite FPS must fail before reaching FFI"
+            );
+        }
     }
 }

@@ -231,6 +231,23 @@ impl DepthaiCoreVersion {
             },
         }
     }
+
+    fn supports_detection_network_v3_8_contract(self) -> bool {
+        match self {
+            DepthaiCoreVersion::Latest => {
+                LATEST_SUPPORTED_DEPTHAI_CORE_TAG.supports_detection_network_v3_8_contract()
+            }
+            DepthaiCoreVersion::V3_8_0 => true,
+            DepthaiCoreVersion::V3_7_1
+            | DepthaiCoreVersion::V3_6_1
+            | DepthaiCoreVersion::V3_5_0
+            | DepthaiCoreVersion::V3_4_0
+            | DepthaiCoreVersion::V3_3_0
+            | DepthaiCoreVersion::V3_2_1
+            | DepthaiCoreVersion::V3_2_0
+            | DepthaiCoreVersion::V3_1_0 => false,
+        }
+    }
 }
 
 fn selected_depthai_core_version() -> DepthaiCoreVersion {
@@ -511,7 +528,12 @@ fn main() {
     let include_paths = build_with_autocxx(no_native);
     if !no_native {
         let opencv_enabled = env_bool("DEPTHAI_OPENCV_SUPPORT").unwrap_or(false);
-        build_cpp_wrapper(&include_paths, opencv_enabled);
+        let selected_version = selected_depthai_core_version();
+        build_cpp_wrapper(
+            &include_paths,
+            opencv_enabled,
+            selected_version.supports_detection_network_v3_8_contract(),
+        );
     }
 
     if target_os_is("windows") {
@@ -1269,7 +1291,11 @@ fn build_with_autocxx(no_native: bool) -> Vec<PathBuf> {
     include_paths
 }
 
-fn build_cpp_wrapper(include_paths: &[PathBuf], opencv_enabled: bool) {
+fn build_cpp_wrapper(
+    include_paths: &[PathBuf],
+    opencv_enabled: bool,
+    has_detection_network_v3_8: bool,
+) {
     println_build!("Building custom C++ wrapper sources...");
 
     // cc-rs respects CFLAGS/CXXFLAGS. On Windows/MSVC these are often set to GCC-style
@@ -1299,6 +1325,10 @@ fn build_cpp_wrapper(include_paths: &[PathBuf], opencv_enabled: bool) {
     cc_build
         .cpp(true)
         .std("c++17")
+        .define(
+            "DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8",
+            Some(if has_detection_network_v3_8 { "1" } else { "0" }),
+        )
         // NNData's typed add/getTensor helpers are conditionally declared by DepthAI-Core.
         // The native build uses the core default (DEPTHAI_XTENSOR_SUPPORT=ON), so expose the
         // same declarations while compiling our C++ wrapper.

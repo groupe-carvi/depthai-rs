@@ -7,8 +7,8 @@
 // - Included by the binding generator (autocxx) via `autocxx_wrapper.h`.
 
 #ifdef __cplusplus
-#include <cstddef>  // size_t
-#include <cstdint>  // uint32_t
+#include <cstddef> // size_t
+#include <cstdint> // uint32_t
 #else
 #include <stdbool.h>
 #include <stddef.h>
@@ -27,72 +27,79 @@ extern "C" {
 #endif
 
 // Version informations getters
-API const char* dai_build_version();
+API const char *dai_build_version();
 API int dai_build_version_major();
 API int dai_build_version_minor();
 API int dai_build_version_patch();
-API const char* dai_build_pre_release_type();
+API const char *dai_build_pre_release_type();
 API int dai_build_pre_release_version();
-API const char* dai_build_commit();
-API const char* dai_build_commit_datetime();
-API const char* dai_build_build_datetime();
-API const char* dai_build_device_version();
-API const char* dai_build_bootloader_version();
-API const char* dai_build_device_rvc3_version();
-API const char* dai_build_device_rvc4_version();
-API bool dai_clock_now_ns(int64_t* timestamp_ns);
+API const char *dai_build_commit();
+API const char *dai_build_commit_datetime();
+API const char *dai_build_build_datetime();
+API const char *dai_build_device_version();
+API const char *dai_build_bootloader_version();
+API const char *dai_build_device_rvc3_version();
+API const char *dai_build_device_rvc4_version();
+API bool dai_clock_now_ns(int64_t *timestamp_ns);
 
 // Helper to duplicate/free returned strings (caller must free)
-API char* dai_string_to_cstring(const char* str);
-API void dai_free_cstring(char* cstring);
+API char *dai_string_to_cstring(const char *str);
+API void dai_free_cstring(char *cstring);
 
 // Opaque handle types
-typedef void* DaiDevice;      // currently: `std::shared_ptr<dai::Device>*`
-typedef void* DaiPipeline;    // currently: `dai::Pipeline*`
-typedef void* DaiNode;        // currently: `dai::Node*` (derived node instance)
-typedef void* DaiCameraNode;  // currently: `dai::node::Camera*`
-typedef void* DaiOutput;      // currently: `dai::Node::Output*`
-typedef void* DaiInput;       // currently: `dai::Node::Input*`
-typedef void* DaiNNArchive;   // currently: `std::shared_ptr<dai::NNArchive>*`
-typedef void* DaiDataQueue;   // currently: `std::shared_ptr<dai::MessageQueue>*`
-typedef void* DaiDatatype;    // currently: `std::shared_ptr<dai::ADatatype>*`
-typedef void* DaiImgFrame;    // currently: `std::shared_ptr<dai::ImgFrame>*`
-typedef void* DaiEncodedFrame; // currently: `std::shared_ptr<dai::EncodedFrame>*`
-typedef void* DaiPointCloud;  // currently: wrapper-owned view of `std::shared_ptr<dai::PointCloudData>`
-typedef void* DaiRGBDData;    // currently: `std::shared_ptr<dai::RGBDData>*`
-typedef void* DaiMessageGroup; // currently: `std::shared_ptr<dai::MessageGroup>*`
-typedef void* DaiBuffer;       // currently: `std::shared_ptr<dai::Buffer>*`
-typedef void* DaiInputQueue;   // currently: `std::shared_ptr<dai::InputQueue>*`
-typedef void* DaiNNData;       // currently: `std::shared_ptr<dai::NNData>*`
+typedef void *DaiDevice;     // currently: `std::shared_ptr<dai::Device>*`
+typedef void *DaiPipeline;   // currently: `dai::Pipeline*`
+typedef void *DaiNode;       // currently: `dai::Node*` (derived node instance)
+typedef void *DaiCameraNode; // currently: `dai::node::Camera*`
+typedef void *DaiOutput;     // currently: `dai::Node::Output*`
+typedef void *DaiInput;      // currently: `dai::Node::Input*`
+typedef void *DaiNNArchive;  // currently: `std::shared_ptr<dai::NNArchive>*`
+typedef void *DaiDataQueue;  // currently: `std::shared_ptr<dai::MessageQueue>*`
+typedef void *DaiDatatype;   // currently: `std::shared_ptr<dai::ADatatype>*`
+typedef void *DaiImgFrame;   // currently: `std::shared_ptr<dai::ImgFrame>*`
+typedef void
+    *DaiEncodedFrame;        // currently: `std::shared_ptr<dai::EncodedFrame>*`
+typedef void *DaiPointCloud; // currently: wrapper-owned view of
+                             // `std::shared_ptr<dai::PointCloudData>`
+typedef void *DaiRGBDData;   // currently: `std::shared_ptr<dai::RGBDData>*`
+typedef void
+    *DaiMessageGroup;        // currently: `std::shared_ptr<dai::MessageGroup>*`
+typedef void *DaiBuffer;     // currently: `std::shared_ptr<dai::Buffer>*`
+typedef void *DaiInputQueue; // currently: `std::shared_ptr<dai::InputQueue>*`
+typedef void *DaiNNData;     // currently: `std::shared_ptr<dai::NNData>*`
+typedef void
+    *DaiImgDetections; // currently: `std::shared_ptr<dai::ImgDetections>*`
 
 // Opaque handle to a heap-allocated array of `DaiDatatype` handles.
 //
-// Use `dai_datatype_array_len` + `dai_datatype_array_take` to extract the elements.
-// Any elements not taken are released when `dai_datatype_array_free` is called.
-typedef void* DaiDatatypeArray;
+// Use `dai_datatype_array_len` + `dai_datatype_array_take` to extract the
+// elements. Any elements not taken are released when `dai_datatype_array_free`
+// is called.
+typedef void *DaiDatatypeArray;
 
 // Host node callback types
-typedef DaiBuffer (*DaiHostNodeProcessGroup)(void* ctx, DaiMessageGroup group);
-typedef void (*DaiHostNodeCallback)(void* ctx);
-typedef void (*DaiThreadedHostNodeRun)(void* ctx);
+typedef DaiBuffer (*DaiHostNodeProcessGroup)(void *ctx, DaiMessageGroup group);
+typedef void (*DaiHostNodeCallback)(void *ctx);
+typedef void (*DaiThreadedHostNodeRun)(void *ctx);
 
 // Queue callback types
-typedef void (*DaiQueueCallback)(void* ctx, const char* queue_name, DaiDatatype msg);
+typedef void (*DaiQueueCallback)(void *ctx, const char *queue_name,
+                                 DaiDatatype msg);
 
 // POD view of `dai::Point3fRGBA`
 typedef struct DaiPoint3fRGBA {
-	float x;
-	float y;
-	float z;
-	unsigned char r;
-	unsigned char g;
-	unsigned char b;
-	unsigned char a;
+  float x;
+  float y;
+  float z;
+  unsigned char r;
+  unsigned char g;
+  unsigned char b;
+  unsigned char a;
 } DaiPoint3fRGBA;
 
 // Low-level device operations
 API DaiDevice dai_device_new();
-API DaiDevice dai_device_new_with_device_id(const char* device_id);
+API DaiDevice dai_device_new_with_device_id(const char *device_id);
 API DaiDevice dai_device_clone(DaiDevice device);
 API void dai_device_delete(DaiDevice device);
 API bool dai_device_is_closed(DaiDevice device);
@@ -100,9 +107,9 @@ API void dai_device_close(DaiDevice device);
 // Returns a newline-delimited list of device IDs for all connected boards
 // Returns an empty string (not null) when none are connected
 // Caller must free with dai_free_cstring()
-API char* dai_get_connected_device_ids();
+API char *dai_get_connected_device_ids();
 
-// Low-level pipeline operations  
+// Low-level pipeline operations
 API DaiPipeline dai_pipeline_new();
 API DaiPipeline dai_pipeline_new_ex(bool create_implicit_device);
 API DaiPipeline dai_pipeline_new_with_device(DaiDevice device);
@@ -116,96 +123,120 @@ API bool dai_pipeline_build(DaiPipeline pipeline);
 API bool dai_pipeline_wait(DaiPipeline pipeline);
 API bool dai_pipeline_stop(DaiPipeline pipeline);
 API bool dai_pipeline_run(DaiPipeline pipeline);
-API bool dai_pipeline_process_tasks(DaiPipeline pipeline, bool wait_for_tasks, double timeout_seconds);
+API bool dai_pipeline_process_tasks(DaiPipeline pipeline, bool wait_for_tasks,
+                                    double timeout_seconds);
 
 // Pipeline configuration
-API bool dai_pipeline_set_xlink_chunk_size(DaiPipeline pipeline, int size_bytes);
-API bool dai_pipeline_set_sipp_buffer_size(DaiPipeline pipeline, int size_bytes);
-API bool dai_pipeline_set_sipp_dma_buffer_size(DaiPipeline pipeline, int size_bytes);
-API bool dai_pipeline_set_camera_tuning_blob_path(DaiPipeline pipeline, const char* path);
+API bool dai_pipeline_set_xlink_chunk_size(DaiPipeline pipeline,
+                                           int size_bytes);
+API bool dai_pipeline_set_sipp_buffer_size(DaiPipeline pipeline,
+                                           int size_bytes);
+API bool dai_pipeline_set_sipp_dma_buffer_size(DaiPipeline pipeline,
+                                               int size_bytes);
+API bool dai_pipeline_set_camera_tuning_blob_path(DaiPipeline pipeline,
+                                                  const char *path);
 API bool dai_pipeline_set_openvino_version(DaiPipeline pipeline, int version);
 
 // Pipeline serialization / introspection
 // Returned strings must be freed with dai_free_cstring.
-API char* dai_pipeline_serialize_to_json(DaiPipeline pipeline, bool include_assets);
-API char* dai_pipeline_get_schema_json(DaiPipeline pipeline, int serialization_type);
+API char *dai_pipeline_serialize_to_json(DaiPipeline pipeline,
+                                         bool include_assets);
+API char *dai_pipeline_get_schema_json(DaiPipeline pipeline,
+                                       int serialization_type);
 
 // Node/connection graph introspection helpers (JSON)
 // Returned strings must be freed with dai_free_cstring.
-API char* dai_pipeline_get_all_nodes_json(DaiPipeline pipeline);
-API char* dai_pipeline_get_source_nodes_json(DaiPipeline pipeline);
+API char *dai_pipeline_get_all_nodes_json(DaiPipeline pipeline);
+API char *dai_pipeline_get_source_nodes_json(DaiPipeline pipeline);
 API DaiNode dai_pipeline_get_node_by_id(DaiPipeline pipeline, int id);
 API bool dai_pipeline_remove_node(DaiPipeline pipeline, DaiNode node);
-API char* dai_pipeline_get_connections_json(DaiPipeline pipeline);
-API char* dai_pipeline_get_connection_map_json(DaiPipeline pipeline);
+API char *dai_pipeline_get_connections_json(DaiPipeline pipeline);
+API char *dai_pipeline_get_connection_map_json(DaiPipeline pipeline);
 
 // Calibration data helpers (JSON)
 // Returned strings must be freed with dai_free_cstring.
 API bool dai_pipeline_is_calibration_data_available(DaiPipeline pipeline);
-API char* dai_pipeline_get_calibration_data_json(DaiPipeline pipeline);
-API bool dai_pipeline_set_calibration_data_json(DaiPipeline pipeline, const char* eeprom_data_json);
+API char *dai_pipeline_get_calibration_data_json(DaiPipeline pipeline);
+API bool dai_pipeline_set_calibration_data_json(DaiPipeline pipeline,
+                                                const char *eeprom_data_json);
 
-// Pipeline configuration via JSON (portable ABI, avoids binding large struct graphs).
-// Returned strings must be freed with dai_free_cstring.
-API char* dai_pipeline_get_global_properties_json(DaiPipeline pipeline);
-API bool dai_pipeline_set_global_properties_json(DaiPipeline pipeline, const char* json);
+// Pipeline configuration via JSON (portable ABI, avoids binding large struct
+// graphs). Returned strings must be freed with dai_free_cstring.
+API char *dai_pipeline_get_global_properties_json(DaiPipeline pipeline);
+API bool dai_pipeline_set_global_properties_json(DaiPipeline pipeline,
+                                                 const char *json);
 
-API char* dai_pipeline_get_board_config_json(DaiPipeline pipeline);
-API bool dai_pipeline_set_board_config_json(DaiPipeline pipeline, const char* json);
+API char *dai_pipeline_get_board_config_json(DaiPipeline pipeline);
+API bool dai_pipeline_set_board_config_json(DaiPipeline pipeline,
+                                            const char *json);
 
-API char* dai_pipeline_get_device_config_json(DaiPipeline pipeline);
+API char *dai_pipeline_get_device_config_json(DaiPipeline pipeline);
 
-API char* dai_pipeline_get_eeprom_data_json(DaiPipeline pipeline);
-API bool dai_pipeline_set_eeprom_data_json(DaiPipeline pipeline, const char* json);
+API char *dai_pipeline_get_eeprom_data_json(DaiPipeline pipeline);
+API bool dai_pipeline_set_eeprom_data_json(DaiPipeline pipeline,
+                                           const char *json);
 API uint32_t dai_pipeline_get_eeprom_id(DaiPipeline pipeline);
 
 // Record / Replay
-API bool dai_pipeline_enable_holistic_record_json(DaiPipeline pipeline, const char* record_config_json);
-API bool dai_pipeline_enable_holistic_replay(DaiPipeline pipeline, const char* path_to_recording);
-API DaiNode dai_pipeline_create_host_node(DaiPipeline pipeline,
-                                          void* ctx,
+API bool
+dai_pipeline_enable_holistic_record_json(DaiPipeline pipeline,
+                                         const char *record_config_json);
+API bool dai_pipeline_enable_holistic_replay(DaiPipeline pipeline,
+                                             const char *path_to_recording);
+API DaiNode dai_pipeline_create_host_node(DaiPipeline pipeline, void *ctx,
                                           DaiHostNodeProcessGroup process_cb,
                                           DaiHostNodeCallback on_start_cb,
                                           DaiHostNodeCallback on_stop_cb,
                                           DaiHostNodeCallback drop_cb);
-API DaiNode dai_pipeline_create_threaded_host_node(DaiPipeline pipeline,
-                                                   void* ctx,
-                                                   DaiThreadedHostNodeRun run_cb,
-                                                   DaiHostNodeCallback on_start_cb,
-                                                   DaiHostNodeCallback on_stop_cb,
-                                                   DaiHostNodeCallback drop_cb);
-// Builder helpers (mirror native API: `pipeline.create<node::RGBD>()->build()`).
+API DaiNode dai_pipeline_create_threaded_host_node(
+    DaiPipeline pipeline, void *ctx, DaiThreadedHostNodeRun run_cb,
+    DaiHostNodeCallback on_start_cb, DaiHostNodeCallback on_stop_cb,
+    DaiHostNodeCallback drop_cb);
+// Builder helpers (mirror native API:
+// `pipeline.create<node::RGBD>()->build()`).
 API DaiNode dai_rgbd_build(DaiNode rgbd);
-// Extended builder helper: `pipeline.create<node::RGBD>()->build(autocreate, mode, size, fps)`.
-// Pass fps <= 0 to leave it unspecified.
-API DaiNode dai_rgbd_build_ex(DaiNode rgbd, bool autocreate, int preset_mode, int width, int height, float fps);
+// Extended builder helper: `pipeline.create<node::RGBD>()->build(autocreate,
+// mode, size, fps)`. Pass fps <= 0 to leave it unspecified.
+API DaiNode dai_rgbd_build_ex(DaiNode rgbd, bool autocreate, int preset_mode,
+                              int width, int height, float fps);
 
 // Pipeline <-> device interop
 API DaiDevice dai_pipeline_get_default_device(DaiPipeline pipeline);
 
 // Generic node creation / linking
-// Note: `DaiNode` is an erased node pointer; it must originate from the same pipeline.
+// Note: `DaiNode` is an erased node pointer; it must originate from the same
+// pipeline.
 API bool dai_pipeline_start_default(DaiPipeline pipeline);
-API DaiNode dai_pipeline_create_node_by_name(DaiPipeline pipeline, const char* name);
+API DaiNode dai_pipeline_create_node_by_name(DaiPipeline pipeline,
+                                             const char *name);
 // Output/Input helpers
-API DaiOutput dai_node_get_output(DaiNode node, const char* group, const char* name);
-API DaiInput dai_node_get_input(DaiNode node, const char* group, const char* name);
+API DaiOutput dai_node_get_output(DaiNode node, const char *group,
+                                  const char *name);
+API DaiInput dai_node_get_input(DaiNode node, const char *group,
+                                const char *name);
 // Get-or-create helpers for Node::InputMap/OutputMap entries.
-API DaiInput dai_node_get_or_create_input(DaiNode node, const char* map, const char* name);
-API DaiOutput dai_node_get_or_create_output(DaiNode node, const char* map, const char* name);
+API DaiInput dai_node_get_or_create_input(DaiNode node, const char *map,
+                                          const char *name);
+API DaiOutput dai_node_get_or_create_output(DaiNode node, const char *map,
+                                            const char *name);
 // Node introspection
 // Returned strings must be freed with dai_free_cstring.
 API int dai_node_get_id(DaiNode node);
-API char* dai_node_get_alias(DaiNode node);
-API bool dai_node_set_alias(DaiNode node, const char* alias);
-API char* dai_node_get_name(DaiNode node);
-API bool dai_output_link(DaiOutput from, DaiNode to, const char* in_group, const char* in_name);
+API char *dai_node_get_alias(DaiNode node);
+API bool dai_node_set_alias(DaiNode node, const char *alias);
+API char *dai_node_get_name(DaiNode node);
+API bool dai_output_link(DaiOutput from, DaiNode to, const char *in_group,
+                         const char *in_name);
 API bool dai_output_link_input(DaiOutput from, DaiInput to);
-API bool dai_node_link(DaiNode from, const char* out_group, const char* out_name, DaiNode to, const char* in_group, const char* in_name);
-API bool dai_node_unlink(DaiNode from, const char* out_group, const char* out_name, DaiNode to, const char* in_group, const char* in_name);
+API bool dai_node_link(DaiNode from, const char *out_group,
+                       const char *out_name, DaiNode to, const char *in_group,
+                       const char *in_name);
+API bool dai_node_unlink(DaiNode from, const char *out_group,
+                         const char *out_name, DaiNode to, const char *in_group,
+                         const char *in_name);
 
 // Host node helpers
-API DaiInput dai_hostnode_get_input(DaiNode node, const char* name);
+API DaiInput dai_hostnode_get_input(DaiNode node, const char *name);
 API void dai_input_set_reuse_previous_message(DaiInput input, bool reuse);
 API bool dai_input_get_reuse_previous_message(DaiInput input);
 API void dai_input_set_wait_for_message(DaiInput input, bool wait_for_message);
@@ -219,53 +250,175 @@ API void dai_hostnode_run_sync_on_device(DaiNode node);
 API void dai_hostnode_send_processing_to_pipeline(DaiNode node, bool send);
 
 // Threaded host node helpers
-API DaiInput dai_threaded_hostnode_create_input(DaiNode node,
-                                                const char* name,
-                                                const char* group,
-                                                bool blocking,
-                                                int queue_size,
+API DaiInput dai_threaded_hostnode_create_input(DaiNode node, const char *name,
+                                                const char *group,
+                                                bool blocking, int queue_size,
                                                 bool wait_for_message);
 API DaiOutput dai_threaded_hostnode_create_output(DaiNode node,
-                                                  const char* name,
-                                                  const char* group);
+                                                  const char *name,
+                                                  const char *group);
 API bool dai_threaded_node_is_running(DaiNode node);
 
 // NeuralNetwork node helpers.
 API void dai_neural_network_set_nn_archive(DaiNode node, DaiNNArchive archive);
-API void dai_neural_network_set_nn_archive_with_shaves(DaiNode node, DaiNNArchive archive, int num_shaves);
+API void dai_neural_network_set_nn_archive_with_shaves(DaiNode node,
+                                                       DaiNNArchive archive,
+                                                       int num_shaves);
 API DaiNNArchive dai_neural_network_get_nn_archive(DaiNode node);
-API void dai_neural_network_set_from_model_zoo_json(DaiNode node, const char* description_json, bool use_cached);
-API void dai_neural_network_set_blob_path(DaiNode node, const char* path);
-API void dai_neural_network_set_blob_bytes(DaiNode node, const void* data, size_t len);
-API void dai_neural_network_set_other_model_path(DaiNode node, const char* path);
-API void dai_neural_network_set_other_model_bytes(DaiNode node, const void* data, size_t len);
-API void dai_neural_network_set_model_path(DaiNode node, const char* path);
+API void dai_neural_network_set_from_model_zoo_json(
+    DaiNode node, const char *description_json, bool use_cached);
+API void dai_neural_network_set_blob_path(DaiNode node, const char *path);
+API void dai_neural_network_set_blob_bytes(DaiNode node, const void *data,
+                                           size_t len);
+API void dai_neural_network_set_other_model_path(DaiNode node,
+                                                 const char *path);
+API void dai_neural_network_set_other_model_bytes(DaiNode node,
+                                                  const void *data, size_t len);
+API void dai_neural_network_set_model_path(DaiNode node, const char *path);
 API void dai_neural_network_set_num_pool_frames(DaiNode node, int num_frames);
-API void dai_neural_network_set_num_inference_threads(DaiNode node, int num_threads);
+API void dai_neural_network_set_num_inference_threads(DaiNode node,
+                                                      int num_threads);
 API int dai_neural_network_get_num_inference_threads(DaiNode node);
-API void dai_neural_network_set_num_nce_per_inference_thread(DaiNode node, int num_nce_per_thread);
-API void dai_neural_network_set_num_shaves_per_inference_thread(DaiNode node, int num_shaves_per_thread);
-API void dai_neural_network_set_backend(DaiNode node, const char* backend);
-API void dai_neural_network_set_backend_properties_json(DaiNode node, const char* properties_json);
+API void
+dai_neural_network_set_num_nce_per_inference_thread(DaiNode node,
+                                                    int num_nce_per_thread);
+API void dai_neural_network_set_num_shaves_per_inference_thread(
+    DaiNode node, int num_shaves_per_thread);
+API void dai_neural_network_set_backend(DaiNode node, const char *backend);
+API void
+dai_neural_network_set_backend_properties_json(DaiNode node,
+                                               const char *properties_json);
 API void dai_neural_network_set_model_from_device_zoo(DaiNode node, int model);
-API bool dai_neural_network_build_from_output(DaiNode node, DaiOutput input, DaiNNArchive archive);
+API bool dai_neural_network_build_from_output(DaiNode node, DaiOutput input,
+                                              DaiNNArchive archive);
 API bool dai_neural_network_build_from_camera_model_json(DaiNode node,
-                                                        DaiCameraNode camera,
-                                                        const char* model_json,
-                                                        float fps,
-                                                        int resize_mode);
+                                                         DaiCameraNode camera,
+                                                         const char *model_json,
+                                                         float fps,
+                                                         int resize_mode);
 API bool dai_neural_network_build_from_camera_archive(DaiNode node,
-                                                     DaiCameraNode camera,
-                                                     DaiNNArchive archive,
-                                                     float fps,
-                                                     int resize_mode);
+                                                      DaiCameraNode camera,
+                                                      DaiNNArchive archive,
+                                                      float fps,
+                                                      int resize_mode);
+
+// DetectionNetwork node helpers.
+API DaiInput dai_detection_network_get_input(DaiNode node);
+API DaiOutput dai_detection_network_get_out(DaiNode node);
+API DaiOutput dai_detection_network_get_out_network(DaiNode node);
+API DaiOutput dai_detection_network_get_passthrough(DaiNode node);
+API DaiNode dai_detection_network_get_neural_network(DaiNode node);
+API DaiNode dai_detection_network_get_detection_parser(DaiNode node);
+API void dai_detection_network_set_nn_archive(DaiNode node,
+                                              DaiNNArchive archive);
+API void dai_detection_network_set_nn_archive_with_shaves(DaiNode node,
+                                                          DaiNNArchive archive,
+                                                          int num_shaves);
+API void dai_detection_network_set_from_model_zoo_json(
+    DaiNode node, const char *description_json, bool use_cached);
+API void dai_detection_network_set_blob_path(DaiNode node, const char *path);
+API void dai_detection_network_set_blob_bytes(DaiNode node, const void *data,
+                                              size_t len);
+API void dai_detection_network_set_model_path(DaiNode node, const char *path);
+API void dai_detection_network_set_num_pool_frames(DaiNode node,
+                                                   int num_frames);
+API void dai_detection_network_set_num_inference_threads(DaiNode node,
+                                                         int num_threads);
+API int dai_detection_network_get_num_inference_threads(DaiNode node);
+API void
+dai_detection_network_set_num_nce_per_inference_thread(DaiNode node,
+                                                       int num_nce_per_thread);
+API void dai_detection_network_set_num_shaves_per_inference_thread(
+    DaiNode node, int num_shaves_per_thread);
+API void dai_detection_network_set_backend(DaiNode node, const char *backend);
+API void
+dai_detection_network_set_backend_properties_json(DaiNode node,
+                                                  const char *properties_json);
+API void dai_detection_network_set_confidence_threshold(DaiNode node,
+                                                        float threshold);
+API float dai_detection_network_get_confidence_threshold(DaiNode node);
+API char *dai_detection_network_get_classes_json(DaiNode node);
+API bool dai_detection_network_build_from_output(DaiNode node, DaiOutput input,
+                                                 DaiNNArchive archive);
+API bool dai_detection_network_build_from_camera_model_json(
+    DaiNode node, DaiCameraNode camera, const char *model_json, float fps,
+    int resize_mode);
+API bool dai_detection_network_build_from_camera_archive(DaiNode node,
+                                                         DaiCameraNode camera,
+                                                         DaiNNArchive archive,
+                                                         float fps,
+                                                         int resize_mode);
+API bool dai_detection_network_build_from_camera_model_capability_json(
+    DaiNode node, DaiCameraNode camera, const char *model_json,
+    const char *capability_json);
+API bool dai_detection_network_build_from_camera_archive_capability_json(
+    DaiNode node, DaiCameraNode camera, DaiNNArchive archive,
+    const char *capability_json);
+
+// DetectionParser node helpers.
+API bool dai_detection_parser_build_from_output(DaiNode parser, DaiOutput input,
+                                                DaiNNArchive archive);
+API void dai_detection_parser_set_num_frames_pool(DaiNode parser,
+                                                  int num_frames);
+API int dai_detection_parser_get_num_frames_pool(DaiNode parser);
+API void dai_detection_parser_set_nn_archive(DaiNode parser,
+                                             DaiNNArchive archive);
+API void dai_detection_parser_set_model_path(DaiNode parser, const char *path);
+API void dai_detection_parser_set_blob_path(DaiNode parser, const char *path);
+API void dai_detection_parser_set_blob_bytes(DaiNode parser, const void *data,
+                                             size_t len);
+API void dai_detection_parser_set_input_image_size(DaiNode parser, int width,
+                                                   int height);
+API void dai_detection_parser_set_nn_family(DaiNode parser, int family);
+API int dai_detection_parser_get_nn_family(DaiNode parser);
+API void dai_detection_parser_set_confidence_threshold(DaiNode parser,
+                                                       float threshold);
+API float dai_detection_parser_get_confidence_threshold(DaiNode parser);
+API void dai_detection_parser_set_num_classes(DaiNode parser, int num_classes);
+API int dai_detection_parser_get_num_classes(DaiNode parser);
+API void dai_detection_parser_set_coordinate_size(DaiNode parser,
+                                                  int coordinate_size);
+API int dai_detection_parser_get_coordinate_size(DaiNode parser);
+API void dai_detection_parser_set_iou_threshold(DaiNode parser,
+                                                float threshold);
+API float dai_detection_parser_get_iou_threshold(DaiNode parser);
+API void dai_detection_parser_set_subtype(DaiNode parser, const char *subtype);
+API char *dai_detection_parser_get_subtype(DaiNode parser);
+API void dai_detection_parser_set_decode_keypoints(DaiNode parser, bool decode);
+API bool dai_detection_parser_get_decode_keypoints(DaiNode parser);
+API void dai_detection_parser_set_decode_segmentation(DaiNode parser,
+                                                      bool decode);
+API bool dai_detection_parser_get_decode_segmentation(DaiNode parser);
+API void dai_detection_parser_set_num_keypoints(DaiNode parser,
+                                                int num_keypoints);
+API int dai_detection_parser_get_num_keypoints(DaiNode parser);
+API void dai_detection_parser_set_run_on_host(DaiNode parser, bool run_on_host);
+API bool dai_detection_parser_run_on_host(DaiNode parser);
+API void dai_detection_parser_set_classes_json(DaiNode parser,
+                                               const char *classes_json);
+API char *dai_detection_parser_get_classes_json(DaiNode parser);
+API void dai_detection_parser_set_anchors_legacy_json(DaiNode parser,
+                                                      const char *anchors_json);
+API char *dai_detection_parser_get_anchors_json(DaiNode parser);
+API void dai_detection_parser_set_anchors_v2_json(DaiNode parser,
+                                                  const char *anchors_json);
+API void
+dai_detection_parser_set_anchor_masks_json(DaiNode parser,
+                                           const char *anchor_masks_json);
+API char *dai_detection_parser_get_anchor_masks_json(DaiNode parser);
+API void dai_detection_parser_set_strides_json(DaiNode parser,
+                                               const char *strides_json);
+API char *dai_detection_parser_get_strides_json(DaiNode parser);
+API void dai_detection_parser_set_keypoint_edges_json(DaiNode parser,
+                                                      const char *edges_json);
 
 // Device helpers
 API int dai_device_get_platform(DaiDevice device);
 // Returned JSON mirrors std::vector<dai::CameraFeatures>.
 // Caller must free with dai_free_cstring().
-API char* dai_device_get_connected_camera_features_json(DaiDevice device);
-API void dai_device_set_ir_laser_dot_projector_intensity(DaiDevice device, float intensity);
+API char *dai_device_get_connected_camera_features_json(DaiDevice device);
+API void dai_device_set_ir_laser_dot_projector_intensity(DaiDevice device,
+                                                         float intensity);
 
 // StereoDepth configuration helpers
 API void dai_stereo_set_subpixel(DaiNode stereo, bool enable);
@@ -276,8 +429,10 @@ API void dai_stereo_set_rectify_edge_fill_color(DaiNode stereo, int color);
 API void dai_stereo_enable_distortion_correction(DaiNode stereo, bool enable);
 API void dai_stereo_set_output_size(DaiNode stereo, int width, int height);
 API void dai_stereo_set_output_keep_aspect_ratio(DaiNode stereo, bool keep);
-API void dai_stereo_initial_set_left_right_check_threshold(DaiNode stereo, int threshold);
-API void dai_stereo_initial_set_threshold_filter_max_range(DaiNode stereo, int max_range);
+API void dai_stereo_initial_set_left_right_check_threshold(DaiNode stereo,
+                                                           int threshold);
+API void dai_stereo_initial_set_threshold_filter_max_range(DaiNode stereo,
+                                                           int max_range);
 
 // RGBD configuration helpers
 API void dai_rgbd_set_depth_unit(DaiNode rgbd, int depth_unit);
@@ -288,16 +443,20 @@ API void dai_image_align_set_output_size(DaiNode align, int width, int height);
 API void dai_image_align_set_out_keep_aspect_ratio(DaiNode align, bool keep);
 
 // ImageManip node helpers
-API void dai_image_manip_set_num_frames_pool(DaiNode manip, int num_frames_pool);
-API void dai_image_manip_set_max_output_frame_size(DaiNode manip, int max_frame_size);
+API void dai_image_manip_set_num_frames_pool(DaiNode manip,
+                                             int num_frames_pool);
+API void dai_image_manip_set_max_output_frame_size(DaiNode manip,
+                                                   int max_frame_size);
 API void dai_image_manip_set_run_on_host(DaiNode manip, bool run_on_host);
 API void dai_image_manip_set_backend(DaiNode manip, int backend);
-API void dai_image_manip_set_performance_mode(DaiNode manip, int performance_mode);
+API void dai_image_manip_set_performance_mode(DaiNode manip,
+                                              int performance_mode);
 API bool dai_image_manip_run_on_host(DaiNode manip);
 API void dai_image_manip_run(DaiNode manip);
 
 // VideoEncoder node helpers
-API void dai_video_encoder_set_default_profile_preset(DaiNode encoder, float fps, int profile);
+API void dai_video_encoder_set_default_profile_preset(DaiNode encoder,
+                                                      float fps, int profile);
 API void dai_video_encoder_set_num_frames_pool(DaiNode encoder, int frames);
 API int dai_video_encoder_get_num_frames_pool(DaiNode encoder);
 
@@ -319,7 +478,8 @@ API void dai_video_encoder_set_lossless(DaiNode encoder, bool lossless);
 API bool dai_video_encoder_get_lossless(DaiNode encoder);
 API void dai_video_encoder_set_frame_rate(DaiNode encoder, float frame_rate);
 API float dai_video_encoder_get_frame_rate(DaiNode encoder);
-API void dai_video_encoder_set_max_output_frame_size(DaiNode encoder, int max_frame_size);
+API void dai_video_encoder_set_max_output_frame_size(DaiNode encoder,
+                                                     int max_frame_size);
 API int dai_video_encoder_get_max_output_frame_size(DaiNode encoder);
 
 // NNData helpers
@@ -327,70 +487,91 @@ API DaiNNData dai_nn_data_new();
 API DaiNNData dai_nn_data_clone(DaiNNData nn_data);
 API void dai_nn_data_release(DaiNNData nn_data);
 API DaiBuffer dai_nn_data_as_buffer(DaiNNData nn_data);
-API bool dai_nn_data_add_tensor(DaiNNData nn_data,
-                                const char* name,
-                                const uint8_t* bytes,
-                                size_t bytes_len,
-                                int data_type,
-                                int storage_order,
-                                const uint32_t* dimensions,
-                                size_t dimensions_len,
-                                const uint32_t* strides,
-                                size_t strides_len,
-                                bool quantized,
-                                float quantization_scale,
-                                float quantization_zero_point);
+API bool dai_nn_data_add_tensor(
+    DaiNNData nn_data, const char *name, const uint8_t *bytes, size_t bytes_len,
+    int data_type, int storage_order, const uint32_t *dimensions,
+    size_t dimensions_len, const uint32_t *strides, size_t strides_len,
+    bool quantized, float quantization_scale, float quantization_zero_point);
 // Returned JSON is either one tensor object or an array of tensor objects.
 // Caller must free with dai_free_cstring().
-API char* dai_nn_data_get_tensor_info_json(DaiNNData nn_data, const char* name);
-API char* dai_nn_data_get_all_tensor_info_json(DaiNNData nn_data);
-API size_t dai_nn_data_get_tensor_data_size(DaiNNData nn_data, const char* name);
-API bool dai_nn_data_copy_tensor_data(DaiNNData nn_data,
-                                      const char* name,
-                                      uint8_t* destination,
+API char *dai_nn_data_get_tensor_info_json(DaiNNData nn_data, const char *name);
+API char *dai_nn_data_get_all_tensor_info_json(DaiNNData nn_data);
+API size_t dai_nn_data_get_tensor_data_size(DaiNNData nn_data,
+                                            const char *name);
+API bool dai_nn_data_copy_tensor_data(DaiNNData nn_data, const char *name,
+                                      uint8_t *destination,
                                       size_t destination_len);
 API void dai_nn_data_set_batch_size(DaiNNData nn_data, uint32_t batch_size);
 API uint32_t dai_nn_data_get_batch_size(DaiNNData nn_data);
 
 // ImageManipConfig helpers
-// Returned handle is a `std::shared_ptr<dai::Buffer>*` actually pointing to a `dai::ImageManipConfig`.
+// Returned handle is a `std::shared_ptr<dai::Buffer>*` actually pointing to a
+// `dai::ImageManipConfig`.
 API DaiBuffer dai_image_manip_config_new();
 API DaiBuffer dai_image_manip_get_initial_config(DaiNode manip);
 API void dai_image_manip_config_clear_ops(DaiBuffer cfg);
-API void dai_image_manip_config_add_crop_xywh(DaiBuffer cfg, uint32_t x, uint32_t y, uint32_t w, uint32_t h);
-API void dai_image_manip_config_add_crop_rect(DaiBuffer cfg, float x, float y, float w, float h, bool normalized_coords);
-API void dai_image_manip_config_add_crop_rotated_rect(DaiBuffer cfg, float cx, float cy, float w, float h, float angle_deg, bool normalized_coords);
-API void dai_image_manip_config_add_scale(DaiBuffer cfg, float scale_x, float scale_y);
+API void dai_image_manip_config_add_crop_xywh(DaiBuffer cfg, uint32_t x,
+                                              uint32_t y, uint32_t w,
+                                              uint32_t h);
+API void dai_image_manip_config_add_crop_rect(DaiBuffer cfg, float x, float y,
+                                              float w, float h,
+                                              bool normalized_coords);
+API void dai_image_manip_config_add_crop_rotated_rect(DaiBuffer cfg, float cx,
+                                                      float cy, float w,
+                                                      float h, float angle_deg,
+                                                      bool normalized_coords);
+API void dai_image_manip_config_add_scale(DaiBuffer cfg, float scale_x,
+                                          float scale_y);
 API void dai_image_manip_config_add_rotate_deg(DaiBuffer cfg, float angle_deg);
-API void dai_image_manip_config_add_rotate_deg_center(DaiBuffer cfg, float angle_deg, float center_x, float center_y);
+API void dai_image_manip_config_add_rotate_deg_center(DaiBuffer cfg,
+                                                      float angle_deg,
+                                                      float center_x,
+                                                      float center_y);
 API void dai_image_manip_config_add_flip_horizontal(DaiBuffer cfg);
 API void dai_image_manip_config_add_flip_vertical(DaiBuffer cfg);
-API void dai_image_manip_config_add_transform_affine(DaiBuffer cfg, const float* matrix4);
-API void dai_image_manip_config_add_transform_perspective(DaiBuffer cfg, const float* matrix9);
-API void dai_image_manip_config_add_transform_four_points(DaiBuffer cfg, const float* src8, const float* dst8, bool normalized_coords);
-API void dai_image_manip_config_set_output_size(DaiBuffer cfg, uint32_t w, uint32_t h, int resize_mode);
+API void dai_image_manip_config_add_transform_affine(DaiBuffer cfg,
+                                                     const float *matrix4);
+API void dai_image_manip_config_add_transform_perspective(DaiBuffer cfg,
+                                                          const float *matrix9);
+API void dai_image_manip_config_add_transform_four_points(
+    DaiBuffer cfg, const float *src8, const float *dst8,
+    bool normalized_coords);
+API void dai_image_manip_config_set_output_size(DaiBuffer cfg, uint32_t w,
+                                                uint32_t h, int resize_mode);
 API void dai_image_manip_config_set_output_center(DaiBuffer cfg, bool center);
 API void dai_image_manip_config_set_colormap(DaiBuffer cfg, int colormap);
-API void dai_image_manip_config_set_background_color_rgb(DaiBuffer cfg, uint32_t red, uint32_t green, uint32_t blue);
-API void dai_image_manip_config_set_background_color_gray(DaiBuffer cfg, uint32_t val);
+API void dai_image_manip_config_set_background_color_rgb(DaiBuffer cfg,
+                                                         uint32_t red,
+                                                         uint32_t green,
+                                                         uint32_t blue);
+API void dai_image_manip_config_set_background_color_gray(DaiBuffer cfg,
+                                                          uint32_t val);
 API void dai_image_manip_config_set_frame_type(DaiBuffer cfg, int frame_type);
 API void dai_image_manip_config_set_undistort(DaiBuffer cfg, bool undistort);
 API bool dai_image_manip_config_get_undistort(DaiBuffer cfg);
-API void dai_image_manip_config_set_reuse_previous_image(DaiBuffer cfg, bool reuse);
-API void dai_image_manip_config_set_skip_current_image(DaiBuffer cfg, bool skip);
+API void dai_image_manip_config_set_reuse_previous_image(DaiBuffer cfg,
+                                                         bool reuse);
+API void dai_image_manip_config_set_skip_current_image(DaiBuffer cfg,
+                                                       bool skip);
 API bool dai_image_manip_config_get_reuse_previous_image(DaiBuffer cfg);
 API bool dai_image_manip_config_get_skip_current_image(DaiBuffer cfg);
 
 // Low-level camera node operations
-API DaiCameraNode dai_pipeline_create_camera(DaiPipeline pipeline, int board_socket);
+API DaiCameraNode dai_pipeline_create_camera(DaiPipeline pipeline,
+                                             int board_socket);
 
 // Camera output wrappers
-API DaiOutput dai_camera_request_output(DaiCameraNode camera, int width, int height, int type, int resize_mode, float fps, int enable_undistortion);
+API DaiOutput dai_camera_request_output(DaiCameraNode camera, int width,
+                                        int height, int type, int resize_mode,
+                                        float fps, int enable_undistortion);
 API DaiOutput dai_camera_request_full_resolution_output(DaiCameraNode camera);
-API DaiOutput dai_camera_request_full_resolution_output_ex(DaiCameraNode camera, int type, float fps, bool use_highest_resolution);
+API DaiOutput dai_camera_request_full_resolution_output_ex(
+    DaiCameraNode camera, int type, float fps, bool use_highest_resolution);
 
 // Camera configuration / introspection
-API bool dai_camera_build(DaiCameraNode camera, int board_socket, int sensor_width, int sensor_height, float sensor_fps);
+API bool dai_camera_build(DaiCameraNode camera, int board_socket,
+                          int sensor_width, int sensor_height,
+                          float sensor_fps);
 API int dai_camera_get_board_socket(DaiCameraNode camera);
 API uint32_t dai_camera_get_max_width(DaiCameraNode camera);
 API uint32_t dai_camera_get_max_height(DaiCameraNode camera);
@@ -403,8 +584,10 @@ API void dai_camera_set_raw_num_frames_pool(DaiCameraNode camera, int num);
 API void dai_camera_set_max_size_pool_raw(DaiCameraNode camera, int size);
 API void dai_camera_set_isp_num_frames_pool(DaiCameraNode camera, int num);
 API void dai_camera_set_max_size_pool_isp(DaiCameraNode camera, int size);
-API void dai_camera_set_num_frames_pools(DaiCameraNode camera, int raw, int isp, int outputs);
-API void dai_camera_set_max_size_pools(DaiCameraNode camera, int raw, int isp, int outputs);
+API void dai_camera_set_num_frames_pools(DaiCameraNode camera, int raw, int isp,
+                                         int outputs);
+API void dai_camera_set_max_size_pools(DaiCameraNode camera, int raw, int isp,
+                                       int outputs);
 API void dai_camera_set_outputs_num_frames_pool(DaiCameraNode camera, int num);
 API void dai_camera_set_outputs_max_size_pool(DaiCameraNode camera, int size);
 
@@ -412,19 +595,22 @@ API int dai_camera_get_raw_num_frames_pool(DaiCameraNode camera);
 API int dai_camera_get_max_size_pool_raw(DaiCameraNode camera);
 API int dai_camera_get_isp_num_frames_pool(DaiCameraNode camera);
 API int dai_camera_get_max_size_pool_isp(DaiCameraNode camera);
-API bool dai_camera_get_outputs_num_frames_pool(DaiCameraNode camera, int* out_num);
-API bool dai_camera_get_outputs_max_size_pool(DaiCameraNode camera, size_t* out_size);
+API bool dai_camera_get_outputs_num_frames_pool(DaiCameraNode camera,
+                                                int *out_num);
+API bool dai_camera_get_outputs_max_size_pool(DaiCameraNode camera,
+                                              size_t *out_size);
 
 // Low-level output operations
-API DaiDataQueue dai_output_create_queue(DaiOutput output, unsigned int max_size, bool blocking);
+API DaiDataQueue dai_output_create_queue(DaiOutput output,
+                                         unsigned int max_size, bool blocking);
 
 // Low-level queue operations
 API void dai_queue_delete(DaiDataQueue queue);
 
 // Generic queue controls / status
 // Returned strings must be freed with dai_free_cstring.
-API char* dai_queue_get_name(DaiDataQueue queue);
-API bool dai_queue_set_name(DaiDataQueue queue, const char* name);
+API char *dai_queue_get_name(DaiDataQueue queue);
+API bool dai_queue_set_name(DaiDataQueue queue, const char *name);
 API bool dai_queue_is_closed(DaiDataQueue queue);
 API void dai_queue_close(DaiDataQueue queue);
 API void dai_queue_set_blocking(DaiDataQueue queue, bool blocking);
@@ -440,21 +626,25 @@ API DaiDatatype dai_queue_get(DaiDataQueue queue, int timeout_ms);
 API DaiDatatype dai_queue_try_get(DaiDataQueue queue);
 API DaiDatatype dai_queue_front(DaiDataQueue queue);
 API DaiDatatypeArray dai_queue_try_get_all(DaiDataQueue queue);
-API DaiDatatypeArray dai_queue_get_all(DaiDataQueue queue, int timeout_ms, bool* has_timedout);
+API DaiDatatypeArray dai_queue_get_all(DaiDataQueue queue, int timeout_ms,
+                                       bool *has_timedout);
 
 // Queue callbacks
-API int dai_queue_add_callback(DaiDataQueue queue, void* ctx, uintptr_t cb, uintptr_t drop_cb);
+API int dai_queue_add_callback(DaiDataQueue queue, void *ctx, uintptr_t cb,
+                               uintptr_t drop_cb);
 API bool dai_queue_remove_callback(DaiDataQueue queue, int callback_id);
 
 // Queue send helpers (mirrors depthai::MessageQueue)
 API void dai_queue_send(DaiDataQueue queue, DaiDatatype msg);
-API bool dai_queue_send_timeout(DaiDataQueue queue, DaiDatatype msg, int timeout_ms);
+API bool dai_queue_send_timeout(DaiDataQueue queue, DaiDatatype msg,
+                                int timeout_ms);
 API bool dai_queue_try_send(DaiDataQueue queue, DaiDatatype msg);
 
 API DaiImgFrame dai_queue_get_frame(DaiDataQueue queue, int timeout_ms);
 API DaiImgFrame dai_queue_try_get_frame(DaiDataQueue queue);
 
-API DaiEncodedFrame dai_queue_get_encoded_frame(DaiDataQueue queue, int timeout_ms);
+API DaiEncodedFrame dai_queue_get_encoded_frame(DaiDataQueue queue,
+                                                int timeout_ms);
 API DaiEncodedFrame dai_queue_try_get_encoded_frame(DaiDataQueue queue);
 
 // Message retrieval for non-ImgFrame outputs
@@ -475,14 +665,32 @@ API DaiBuffer dai_datatype_as_buffer(DaiDatatype msg);
 API DaiNNData dai_datatype_as_nn_data(DaiDatatype msg);
 API DaiMessageGroup dai_datatype_as_message_group(DaiDatatype msg);
 API DaiDatatype dai_datatype_as_nndata(DaiDatatype msg);
+API DaiImgDetections dai_datatype_as_img_detections(DaiDatatype msg);
 API size_t dai_datatype_array_len(DaiDatatypeArray arr);
 API DaiDatatype dai_datatype_array_take(DaiDatatypeArray arr, size_t index);
 API void dai_datatype_array_free(DaiDatatypeArray arr);
 
+// ImgDetections helpers
+API DaiImgDetections dai_img_detections_new();
+API DaiImgDetections dai_img_detections_clone(DaiImgDetections detections);
+API void dai_img_detections_release(DaiImgDetections detections);
+API DaiBuffer dai_img_detections_as_buffer(DaiImgDetections detections);
+API DaiDatatype dai_img_detections_as_datatype(DaiImgDetections detections);
+API bool dai_img_detections_get_count(DaiImgDetections detections,
+                                      size_t *count);
+API char *dai_img_detections_get_detections_json(
+    DaiImgDetections detections);
+API bool dai_img_detections_get_mask_info(DaiImgDetections detections,
+                                          bool *present, size_t *width,
+                                          size_t *height, size_t *byte_length);
+API bool dai_img_detections_copy_mask(DaiImgDetections detections,
+                                      uint8_t *destination, size_t capacity,
+                                      size_t *written);
+
 // PointCloud view accessors
 API int dai_pointcloud_get_width(DaiPointCloud pcl);
 API int dai_pointcloud_get_height(DaiPointCloud pcl);
-API const DaiPoint3fRGBA* dai_pointcloud_get_points_rgba(DaiPointCloud pcl);
+API const DaiPoint3fRGBA *dai_pointcloud_get_points_rgba(DaiPointCloud pcl);
 API size_t dai_pointcloud_get_points_rgba_len(DaiPointCloud pcl);
 API void dai_pointcloud_release(DaiPointCloud pcl);
 
@@ -498,7 +706,9 @@ API DaiImgFrame dai_input_get_img_frame(DaiInput input);
 API DaiImgFrame dai_input_try_get_img_frame(DaiInput input);
 
 // Host -> device input queue (depthai::InputQueue)
-API DaiInputQueue dai_input_create_input_queue(DaiInput input, unsigned int max_size, bool blocking);
+API DaiInputQueue dai_input_create_input_queue(DaiInput input,
+                                               unsigned int max_size,
+                                               bool blocking);
 API void dai_input_queue_delete(DaiInputQueue queue);
 API void dai_input_queue_send(DaiInputQueue queue, DaiDatatype msg);
 API void dai_input_queue_send_nn_data(DaiInputQueue queue, DaiNNData nn_data);
@@ -511,50 +721,68 @@ API void dai_output_send_nn_data(DaiOutput output, DaiNNData nn_data);
 // MessageGroup helpers
 API DaiMessageGroup dai_message_group_clone(DaiMessageGroup group);
 API void dai_message_group_release(DaiMessageGroup group);
-API DaiBuffer dai_message_group_get_buffer(DaiMessageGroup group, const char* name);
-API DaiImgFrame dai_message_group_get_img_frame(DaiMessageGroup group, const char* name);
+API DaiBuffer dai_message_group_get_buffer(DaiMessageGroup group,
+                                           const char *name);
+API DaiImgFrame dai_message_group_get_img_frame(DaiMessageGroup group,
+                                                const char *name);
 
 // Buffer helpers
 API DaiBuffer dai_buffer_new(size_t size);
 API void dai_buffer_release(DaiBuffer buffer);
-API void dai_buffer_set_data(DaiBuffer buffer, const void* data, size_t len);
-API bool dai_buffer_get_timestamp_ns(DaiBuffer buffer, int64_t* timestamp_ns);
-API bool dai_buffer_get_timestamp_device_ns(DaiBuffer buffer, int64_t* timestamp_ns);
-API bool dai_buffer_get_timestamp_system_ns(DaiBuffer buffer, int64_t* timestamp_ns, bool* has_timestamp);
+API void dai_buffer_set_data(DaiBuffer buffer, const void *data, size_t len);
+API bool dai_buffer_get_timestamp_ns(DaiBuffer buffer, int64_t *timestamp_ns);
+API bool dai_buffer_get_timestamp_device_ns(DaiBuffer buffer,
+                                            int64_t *timestamp_ns);
+API bool dai_buffer_get_timestamp_system_ns(DaiBuffer buffer,
+                                            int64_t *timestamp_ns,
+                                            bool *has_timestamp);
 API bool dai_buffer_set_timestamp_ns(DaiBuffer buffer, int64_t timestamp_ns);
-API bool dai_buffer_set_timestamp_device_ns(DaiBuffer buffer, int64_t timestamp_ns);
-API bool dai_buffer_set_timestamp_system_ns(DaiBuffer buffer, int64_t timestamp_ns, bool has_timestamp);
-API bool dai_buffer_get_sequence_num(DaiBuffer buffer, int64_t* sequence_num);
+API bool dai_buffer_set_timestamp_device_ns(DaiBuffer buffer,
+                                            int64_t timestamp_ns);
+API bool dai_buffer_set_timestamp_system_ns(DaiBuffer buffer,
+                                            int64_t timestamp_ns,
+                                            bool has_timestamp);
+API bool dai_buffer_get_sequence_num(DaiBuffer buffer, int64_t *sequence_num);
 API bool dai_buffer_set_sequence_num(DaiBuffer buffer, int64_t sequence_num);
 
 // Low-level frame operations
-API void* dai_frame_get_data(DaiImgFrame frame);
+API void *dai_frame_get_data(DaiImgFrame frame);
 API int dai_frame_get_width(DaiImgFrame frame);
 API int dai_frame_get_height(DaiImgFrame frame);
 API int dai_frame_get_type(DaiImgFrame frame);
 API size_t dai_frame_get_size(DaiImgFrame frame);
-API bool dai_frame_get_stride(DaiImgFrame frame, uint32_t* stride);
-API bool dai_frame_get_plane_stride(DaiImgFrame frame, uint32_t plane_index, uint32_t* plane_stride);
-API bool dai_frame_get_plane_height(DaiImgFrame frame, uint32_t* plane_height);
-API bool dai_frame_get_timestamp_ns(DaiImgFrame frame, int64_t* timestamp_ns);
-API bool dai_frame_get_timestamp_device_ns(DaiImgFrame frame, int64_t* timestamp_ns);
-API bool dai_frame_get_timestamp_system_ns(DaiImgFrame frame, int64_t* timestamp_ns, bool* has_timestamp);
-API bool dai_frame_get_timestamp_with_offset_ns(DaiImgFrame frame, int exposure_offset, int64_t* timestamp_ns);
-API bool dai_frame_get_timestamp_device_with_offset_ns(DaiImgFrame frame, int exposure_offset, int64_t* timestamp_ns);
-API bool dai_frame_get_timestamp_system_with_offset_ns(
-    DaiImgFrame frame,
-    int exposure_offset,
-    int64_t* timestamp_ns,
-    bool* has_timestamp);
+API bool dai_frame_get_stride(DaiImgFrame frame, uint32_t *stride);
+API bool dai_frame_get_plane_stride(DaiImgFrame frame, uint32_t plane_index,
+                                    uint32_t *plane_stride);
+API bool dai_frame_get_plane_height(DaiImgFrame frame, uint32_t *plane_height);
+API bool dai_frame_get_timestamp_ns(DaiImgFrame frame, int64_t *timestamp_ns);
+API bool dai_frame_get_timestamp_device_ns(DaiImgFrame frame,
+                                           int64_t *timestamp_ns);
+API bool dai_frame_get_timestamp_system_ns(DaiImgFrame frame,
+                                           int64_t *timestamp_ns,
+                                           bool *has_timestamp);
+API bool dai_frame_get_timestamp_with_offset_ns(DaiImgFrame frame,
+                                                int exposure_offset,
+                                                int64_t *timestamp_ns);
+API bool dai_frame_get_timestamp_device_with_offset_ns(DaiImgFrame frame,
+                                                       int exposure_offset,
+                                                       int64_t *timestamp_ns);
+API bool dai_frame_get_timestamp_system_with_offset_ns(DaiImgFrame frame,
+                                                       int exposure_offset,
+                                                       int64_t *timestamp_ns,
+                                                       bool *has_timestamp);
 API bool dai_frame_set_timestamp_ns(DaiImgFrame frame, int64_t timestamp_ns);
-API bool dai_frame_set_timestamp_device_ns(DaiImgFrame frame, int64_t timestamp_ns);
-API bool dai_frame_set_timestamp_system_ns(DaiImgFrame frame, int64_t timestamp_ns, bool has_timestamp);
-API bool dai_frame_get_sequence_num(DaiImgFrame frame, int64_t* sequence_num);
+API bool dai_frame_set_timestamp_device_ns(DaiImgFrame frame,
+                                           int64_t timestamp_ns);
+API bool dai_frame_set_timestamp_system_ns(DaiImgFrame frame,
+                                           int64_t timestamp_ns,
+                                           bool has_timestamp);
+API bool dai_frame_get_sequence_num(DaiImgFrame frame, int64_t *sequence_num);
 API bool dai_frame_set_sequence_num(DaiImgFrame frame, int64_t sequence_num);
 API void dai_frame_release(DaiImgFrame frame);
 
 // EncodedFrame accessors
-API void* dai_encoded_frame_get_data(DaiEncodedFrame frame);
+API void *dai_encoded_frame_get_data(DaiEncodedFrame frame);
 API size_t dai_encoded_frame_get_data_size(DaiEncodedFrame frame);
 API uint32_t dai_encoded_frame_get_frame_offset(DaiEncodedFrame frame);
 API uint32_t dai_encoded_frame_get_frame_size(DaiEncodedFrame frame);
@@ -566,25 +794,30 @@ API int dai_encoded_frame_get_quality(DaiEncodedFrame frame);
 API int dai_encoded_frame_get_bitrate(DaiEncodedFrame frame);
 API bool dai_encoded_frame_get_lossless(DaiEncodedFrame frame);
 API int dai_encoded_frame_get_instance_num(DaiEncodedFrame frame);
-API bool dai_encoded_frame_get_timestamp_ns(DaiEncodedFrame frame, int64_t* timestamp_ns);
-API bool dai_encoded_frame_get_timestamp_device_ns(DaiEncodedFrame frame, int64_t* timestamp_ns);
-API bool dai_encoded_frame_get_timestamp_system_ns(
-    DaiEncodedFrame frame,
-    int64_t* timestamp_ns,
-    bool* has_timestamp);
-API bool dai_encoded_frame_set_timestamp_ns(DaiEncodedFrame frame, int64_t timestamp_ns);
-API bool dai_encoded_frame_set_timestamp_device_ns(DaiEncodedFrame frame, int64_t timestamp_ns);
-API bool dai_encoded_frame_set_timestamp_system_ns(
-    DaiEncodedFrame frame,
-    int64_t timestamp_ns,
-    bool has_timestamp);
-API bool dai_encoded_frame_get_sequence_num(DaiEncodedFrame frame, int64_t* sequence_num);
-API bool dai_encoded_frame_set_sequence_num(DaiEncodedFrame frame, int64_t sequence_num);
+API bool dai_encoded_frame_get_timestamp_ns(DaiEncodedFrame frame,
+                                            int64_t *timestamp_ns);
+API bool dai_encoded_frame_get_timestamp_device_ns(DaiEncodedFrame frame,
+                                                   int64_t *timestamp_ns);
+API bool dai_encoded_frame_get_timestamp_system_ns(DaiEncodedFrame frame,
+                                                   int64_t *timestamp_ns,
+                                                   bool *has_timestamp);
+API bool dai_encoded_frame_set_timestamp_ns(DaiEncodedFrame frame,
+                                            int64_t timestamp_ns);
+API bool dai_encoded_frame_set_timestamp_device_ns(DaiEncodedFrame frame,
+                                                   int64_t timestamp_ns);
+API bool dai_encoded_frame_set_timestamp_system_ns(DaiEncodedFrame frame,
+                                                   int64_t timestamp_ns,
+                                                   bool has_timestamp);
+API bool dai_encoded_frame_get_sequence_num(DaiEncodedFrame frame,
+                                            int64_t *sequence_num);
+API bool dai_encoded_frame_set_sequence_num(DaiEncodedFrame frame,
+                                            int64_t sequence_num);
 API void dai_encoded_frame_release(DaiEncodedFrame frame);
 
 // Low-level utility functions
-API int dai_device_get_connected_camera_sockets(DaiDevice device, int* sockets, int max_count);
-API const char* dai_camera_socket_name(int socket);
+API int dai_device_get_connected_camera_sockets(DaiDevice device, int *sockets,
+                                                int max_count);
+API const char *dai_camera_socket_name(int socket);
 
 // ---------------------------------------------------------------------------
 // v3.4.0+ API additions
@@ -598,8 +831,8 @@ API void dai_gate_set_run_on_host(DaiNode gate, bool run_on_host);
 API bool dai_gate_run_on_host(DaiNode gate);
 
 // GateControl factory helpers.
-// All returned handles are `std::shared_ptr<dai::GateControl>*` (a `DaiBuffer` subtype).
-// Caller must release via `dai_buffer_release`.
+// All returned handles are `std::shared_ptr<dai::GateControl>*` (a `DaiBuffer`
+// subtype). Caller must release via `dai_buffer_release`.
 API DaiBuffer dai_gate_control_open_all();
 API DaiBuffer dai_gate_control_close();
 API DaiBuffer dai_gate_control_open_n(int num_messages, int fps);
@@ -611,7 +844,8 @@ API DaiOutput dai_camera_request_isp_output(DaiCameraNode camera, float fps);
 // Camera image orientation (available when depthai-core >= v3.4.0).
 // orientation values mirror dai::CameraImageOrientation: AUTO=-1, NORMAL=0,
 // HORIZONTAL_MIRROR=1, VERTICAL_FLIP=2, ROTATE_180_DEG=3.
-API void dai_camera_set_image_orientation(DaiCameraNode camera, int orientation);
+API void dai_camera_set_image_orientation(DaiCameraNode camera,
+                                          int orientation);
 API int dai_camera_get_image_orientation(DaiCameraNode camera);
 
 // ---------------------------------------------------------------------------
@@ -622,85 +856,79 @@ API int dai_camera_get_image_orientation(DaiCameraNode camera);
 // model_name: logical name or path string (not necessarily a filesystem path).
 // models_path: search base directory; pass "" to use env var / default.
 // Returned JSON uses camelCase keys. Caller must free with dai_free_cstring.
-API char* dai_nn_model_description_from_yaml_file_json(const char* model_name, const char* models_path);
+API char *dai_nn_model_description_from_yaml_file_json(const char *model_name,
+                                                       const char *models_path);
 
 // Reconstructs NNModelDescription from JSON (camelCase keys) and saves to yaml.
-API bool dai_nn_model_description_save_to_yaml_file_json(const char* desc_json, const char* yaml_path);
+API bool dai_nn_model_description_save_to_yaml_file_json(const char *desc_json,
+                                                         const char *yaml_path);
 
 // ModelZoo global config (dai::modelzoo namespace).
 // Getters return heap strings; caller must free with dai_free_cstring.
-API bool  dai_modelzoo_set_health_endpoint(const char* endpoint);
-API char* dai_modelzoo_get_health_endpoint();
-API bool  dai_modelzoo_set_download_endpoint(const char* endpoint);
-API char* dai_modelzoo_get_download_endpoint();
-API bool  dai_modelzoo_set_default_cache_path(const char* path);
-API char* dai_modelzoo_get_default_cache_path();
-API bool  dai_modelzoo_set_default_models_path(const char* path);
-API char* dai_modelzoo_get_default_models_path();
+API bool dai_modelzoo_set_health_endpoint(const char *endpoint);
+API char *dai_modelzoo_get_health_endpoint();
+API bool dai_modelzoo_set_download_endpoint(const char *endpoint);
+API char *dai_modelzoo_get_download_endpoint();
+API bool dai_modelzoo_set_default_cache_path(const char *path);
+API char *dai_modelzoo_get_default_cache_path();
+API bool dai_modelzoo_set_default_models_path(const char *path);
+API char *dai_modelzoo_get_default_models_path();
 
 // Zoo free functions. desc_json uses camelCase keys.
 // cache_dir / api_key / progress_format: pass "" to use env / defaults.
 // NOTE: depthai-core throws if built without libcurl; surfaced via last_error.
 // Returned path string must be freed with dai_free_cstring.
-API char* dai_get_model_from_zoo_json(const char* desc_json,
-                                      bool use_cached,
-                                      const char* cache_dir,
-                                      const char* api_key,
-                                      const char* progress_format);
+API char *dai_get_model_from_zoo_json(const char *desc_json, bool use_cached,
+                                      const char *cache_dir,
+                                      const char *api_key,
+                                      const char *progress_format);
 // Returns true if ALL models downloaded successfully (false = partial failure).
-API bool dai_download_models_from_zoo(const char* path,
-                                      const char* cache_dir,
-                                      const char* api_key,
-                                      const char* progress_format);
+API bool dai_download_models_from_zoo(const char *path, const char *cache_dir,
+                                      const char *api_key,
+                                      const char *progress_format);
 
 // NNArchive helpers. Returned JSON strings must be freed with dai_free_cstring.
-API DaiNNArchive dai_nn_archive_new(const char* path, int compression);
+API DaiNNArchive dai_nn_archive_new(const char *path, int compression);
 API DaiNNArchive dai_nn_archive_clone(DaiNNArchive archive);
 API void dai_nn_archive_delete(DaiNNArchive archive);
 API int dai_nn_archive_get_model_type(DaiNNArchive archive);
-API bool dai_nn_archive_get_input_size(DaiNNArchive archive,
-                                       uint32_t index,
-                                       uint32_t* width,
-                                       uint32_t* height);
-API bool dai_nn_archive_get_input_width(DaiNNArchive archive, uint32_t index, uint32_t* width);
-API bool dai_nn_archive_get_input_height(DaiNNArchive archive, uint32_t index, uint32_t* height);
-API char* dai_nn_archive_get_supported_platforms_json(DaiNNArchive archive);
+API bool dai_nn_archive_get_input_size(DaiNNArchive archive, uint32_t index,
+                                       uint32_t *width, uint32_t *height);
+API bool dai_nn_archive_get_input_width(DaiNNArchive archive, uint32_t index,
+                                        uint32_t *width);
+API bool dai_nn_archive_get_input_height(DaiNNArchive archive, uint32_t index,
+                                         uint32_t *height);
+API char *dai_nn_archive_get_supported_platforms_json(DaiNNArchive archive);
 
-// NNData helpers. NNData values use the generic DaiDatatype ownership representation
-// (`std::shared_ptr<dai::ADatatype>*`) and are released with dai_datatype_release.
+// NNData helpers. NNData values use the generic DaiDatatype ownership
+// representation
+// (`std::shared_ptr<dai::ADatatype>*`) and are released with
+// dai_datatype_release.
 API DaiDatatype dai_nndata_new(size_t size);
-API char* dai_nndata_get_all_layer_names_json(DaiDatatype nndata);
-API bool dai_nndata_has_layer(DaiDatatype nndata, const char* name);
-API char* dai_nndata_get_tensor_info_json(DaiDatatype nndata, const char* name);
-API bool dai_nndata_get_tensor_element_count(DaiDatatype nndata, const char* name, size_t* count);
-API bool dai_nndata_get_tensor_byte_size(DaiDatatype nndata, const char* name, size_t* size);
-API bool dai_nndata_copy_tensor_bytes(DaiDatatype nndata,
-                                      const char* name,
-                                      void* out,
-                                      size_t capacity,
-                                      size_t* written);
-API bool dai_nndata_copy_tensor_values(DaiDatatype nndata,
-                                       const char* name,
-                                       int output_type,
-                                       bool dequantize,
-                                       void* out,
-                                       size_t capacity,
-                                       size_t* written);
-API bool dai_nndata_add_tensor(DaiDatatype nndata,
-                               const char* name,
-                               int source_type,
-                               const void* data,
-                               size_t element_count,
-                               const int64_t* shape,
-                               size_t rank,
-                               int storage_order,
-                               int tensor_type);
+API char *dai_nndata_get_all_layer_names_json(DaiDatatype nndata);
+API bool dai_nndata_has_layer(DaiDatatype nndata, const char *name);
+API char *dai_nndata_get_tensor_info_json(DaiDatatype nndata, const char *name);
+API bool dai_nndata_get_tensor_element_count(DaiDatatype nndata,
+                                             const char *name, size_t *count);
+API bool dai_nndata_get_tensor_byte_size(DaiDatatype nndata, const char *name,
+                                         size_t *size);
+API bool dai_nndata_copy_tensor_bytes(DaiDatatype nndata, const char *name,
+                                      void *out, size_t capacity,
+                                      size_t *written);
+API bool dai_nndata_copy_tensor_values(DaiDatatype nndata, const char *name,
+                                       int output_type, bool dequantize,
+                                       void *out, size_t capacity,
+                                       size_t *written);
+API bool dai_nndata_add_tensor(DaiDatatype nndata, const char *name,
+                               int source_type, const void *data,
+                               size_t element_count, const int64_t *shape,
+                               size_t rank, int storage_order, int tensor_type);
 
 // Error handling.
 // The returned pointer belongs to the calling thread's error storage.
 // Copy it before calling dai_clear_last_error or another wrapper operation
 // on that thread. It must not be used by a different thread.
-API const char* dai_get_last_error();
+API const char *dai_get_last_error();
 API void dai_clear_last_error();
 
 #ifdef __cplusplus

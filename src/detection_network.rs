@@ -889,6 +889,327 @@ impl DetectionParserNode {
         check_void_result("failed to set DetectionParser keypoint edges")
     }
 }
+#[crate::native_node_wrapper(native = "dai::node::DetectionNetwork")]
+/// A detection network composed of a neural network and detection parser.
+///
+/// This is a Core `DeviceNodeGroup`, not a `NeuralNetwork` subclass. Use
+/// [`Self::out`] for parsed detections and [`Self::out_network`] for raw
+/// neural-network output.
+pub struct DetectionNetworkNode {
+    node: crate::pipeline::Node,
+}
+
+impl DetectionNetworkNode {
+    /// Returns the neural-network input alias.
+    ///
+    /// This alias is owned by the group's neural-network subnode.
+    pub fn input(&self) -> Result<Input> {
+        clear_error_flag();
+        let handle = unsafe { depthai::dai_detection_network_get_input(self.node.handle()) };
+        if handle.is_null() {
+            Err(last_error("failed to get DetectionNetworkNode input"))
+        } else {
+            Ok(Input::from_handle(Arc::clone(&self.node.pipeline), handle))
+        }
+    }
+
+    /// Returns the parsed [`ImgDetections`] output.
+    pub fn out(&self) -> Result<Output> {
+        clear_error_flag();
+        let handle = unsafe { depthai::dai_detection_network_get_out(self.node.handle()) };
+        if handle.is_null() {
+            Err(last_error("failed to get DetectionNetworkNode output"))
+        } else {
+            Ok(Output::from_handle(Arc::clone(&self.node.pipeline), handle))
+        }
+    }
+
+    /// Returns the raw [`crate::NNData`] output from the neural network.
+    pub fn out_network(&self) -> Result<Output> {
+        clear_error_flag();
+        let handle = unsafe { depthai::dai_detection_network_get_out_network(self.node.handle()) };
+        if handle.is_null() {
+            Err(last_error("failed to get DetectionNetworkNode out network"))
+        } else {
+            Ok(Output::from_handle(Arc::clone(&self.node.pipeline), handle))
+        }
+    }
+
+    /// Returns the neural-network passthrough output alias.
+    ///
+    /// The alias is owned by the neural-network subnode.
+    pub fn passthrough(&self) -> Result<Output> {
+        clear_error_flag();
+        let handle = unsafe { depthai::dai_detection_network_get_passthrough(self.node.handle()) };
+        if handle.is_null() {
+            Err(last_error("failed to get DetectionNetworkNode passthrough"))
+        } else {
+            Ok(Output::from_handle(Arc::clone(&self.node.pipeline), handle))
+        }
+    }
+
+    /// Returns a typed view of the group's borrowed detection parser.
+    ///
+    /// The view remains usable while the parent pipeline is alive and does not
+    /// own or release the native subnode.
+    pub fn detection_parser(&self) -> Result<DetectionParserNode> {
+        clear_error_flag();
+        let parser =
+            unsafe { depthai::dai_detection_network_get_detection_parser(self.node.handle()) };
+        if parser.is_null() {
+            return Err(last_error(
+                "failed to get detection parser from DetectionNetworkNode",
+            ));
+        }
+
+        let node = crate::pipeline::Node::from_handle(Arc::clone(&self.node.pipeline), parser);
+
+        Ok(DetectionParserNode::from_node(node))
+    }
+
+    /// Returns a typed view of the group's borrowed neural network.
+    ///
+    /// The view remains usable while the parent pipeline is alive and does not
+    /// own or release the native subnode.
+    pub fn neural_network(&self) -> Result<NeuralNetworkNode> {
+        clear_error_flag();
+        let nn = unsafe { depthai::dai_detection_network_get_neural_network(self.node.handle()) };
+        if nn.is_null() {
+            return Err(last_error(
+                "failed to get neural network from DetectionNetworkNode",
+            ));
+        }
+
+        let node = crate::pipeline::Node::from_handle(Arc::clone(&self.node.pipeline), nn);
+        Ok(NeuralNetworkNode::from_node(node))
+    }
+
+    /// Configures both subnodes from an [`NNArchive`].
+    pub fn set_nn_archive(&self, archive: &NNArchive) -> Result<()> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_detection_network_set_nn_archive(self.node.handle(), archive.handle())
+        };
+        check_void_result("failed to set DetectionNetwork NNArchive")
+    }
+
+    /// Configures both subnodes from an [`NNArchive`] using a shave count.
+    ///
+    /// The shave count is used for SUPERBLOB archives.
+    pub fn set_nn_archive_with_shaves(&self, archive: &NNArchive, num_shaves: i32) -> Result<()> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_detection_network_set_nn_archive_with_shaves(
+                self.node.handle(),
+                archive.handle(),
+                num_shaves.into(),
+            )
+        };
+        check_void_result("failed to set DetectionNetwork NNArchive/shaves")
+    }
+
+    /// Downloads or resolves a model description and configures the group.
+    pub fn set_from_model_zoo(
+        &self,
+        description: &NNModelDescription,
+        use_cached: bool,
+    ) -> Result<()> {
+        let desc_json = serde_json::to_string(description).map_err(|e| {
+            DepthaiError::new(format!("failed to serialize model description: {e}"))
+        })?;
+        let desc_c = CString::new(desc_json)
+            .map_err(|_| DepthaiError::new("model description contains NUL"))?;
+
+        clear_error_flag();
+        unsafe {
+            depthai::dai_detection_network_set_from_model_zoo_json(
+                self.node.handle(),
+                desc_c.as_ptr(),
+                use_cached,
+            )
+        };
+        check_void_result("failed to set from model zoo")
+    }
+
+    /// Configures both subnodes from a blob file.
+    pub fn set_blob_path(&self, path: impl AsRef<Path>) -> Result<()> {
+        let path = path
+            .as_ref()
+            .to_str()
+            .ok_or_else(|| DepthaiError::new("blob path is not valid UTF-8"))?;
+        let path = CString::new(path).map_err(|_| DepthaiError::new("blob path contains NUL"))?;
+        clear_error_flag();
+        unsafe { depthai::dai_detection_network_set_blob_path(self.node.handle(), path.as_ptr()) };
+        check_void_result("failed to set DetectionNetwork blob path")
+    }
+
+    /// Configures both subnodes from encoded blob bytes.
+    pub fn set_blob_bytes(&self, bytes: &[u8]) -> Result<()> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_detection_network_set_blob_bytes(
+                self.node.handle(),
+                bytes.as_ptr() as *const _,
+                bytes.len(),
+            )
+        };
+        check_void_result("failed to set blob bytes")
+    }
+
+    /// Configures both subnodes from a model path.
+    pub fn set_model_path(&self, path: impl AsRef<Path>) -> Result<()> {
+        let path = path
+            .as_ref()
+            .to_str()
+            .ok_or_else(|| DepthaiError::new("model path is not valid UTF-8"))?;
+        let path = CString::new(path).map_err(|_| DepthaiError::new("model path contains NUL"))?;
+        clear_error_flag();
+        unsafe { depthai::dai_detection_network_set_model_path(self.node.handle(), path.as_ptr()) };
+        check_void_result("failed to set DetectionNetwork model path")
+    }
+
+    /// Sets the number of neural-network pool frames.
+    pub fn set_num_pool_frames(&self, num_frames: i32) -> Result<()> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_detection_network_set_num_pool_frames(
+                self.node.handle(),
+                num_frames.into(),
+            )
+        };
+        check_void_result("failed to set DetectionNetwork pool frames")
+    }
+
+    /// Sets the number of neural-network inference threads.
+    pub fn set_num_inference_threads(&self, num_threads: i32) -> Result<()> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_detection_network_set_num_inference_threads(
+                self.node.handle(),
+                num_threads.into(),
+            )
+        };
+        check_void_result("failed to set DetectionNetwork inference threads")
+    }
+
+    /// Returns the number of neural-network inference threads.
+    pub fn num_inference_threads(&self) -> Result<i32> {
+        clear_error_flag();
+        let value: i32 =
+            unsafe { depthai::dai_detection_network_get_num_inference_threads(self.node.handle()) }
+                .into();
+        if let Some(error) = take_error_if_any("failed to get DetectionNetwork inference threads") {
+            Err(error)
+        } else {
+            Ok(value)
+        }
+    }
+
+    /// Sets the number of NCEs used per inference thread.
+    pub fn set_num_nce_per_inference_thread(&self, num_nce: i32) -> Result<()> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_detection_network_set_num_nce_per_inference_thread(
+                self.node.handle(),
+                num_nce.into(),
+            )
+        };
+        check_void_result("failed to set DetectionNetwork NCEs per thread")
+    }
+
+    /// Sets the number of shaves used per inference thread.
+    pub fn set_num_shaves_per_inference_thread(&self, num_shaves: i32) -> Result<()> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_detection_network_set_num_shaves_per_inference_thread(
+                self.node.handle(),
+                num_shaves.into(),
+            )
+        };
+        check_void_result("failed to set DetectionNetwork shaves per thread")
+    }
+
+    /// Sets the neural-network backend.
+    pub fn set_backend(&self, backend: &str) -> Result<()> {
+        let backend =
+            CString::new(backend).map_err(|_| DepthaiError::new("backend contains NUL"))?;
+        clear_error_flag();
+        unsafe { depthai::dai_detection_network_set_backend(self.node.handle(), backend.as_ptr()) };
+        check_void_result("failed to set DetectionNetwork backend")
+    }
+
+    /// Sets backend properties.
+    pub fn set_backend_properties(&self, properties: &BTreeMap<String, String>) -> Result<()> {
+        let json = serde_json::to_string(properties).map_err(|error| {
+            DepthaiError::new(format!("failed to serialize backend properties: {error}"))
+        })?;
+        let json = CString::new(json)
+            .map_err(|_| DepthaiError::new("serialized backend properties contain NUL"))?;
+        clear_error_flag();
+        unsafe {
+            depthai::dai_detection_network_set_backend_properties_json(
+                self.node.handle(),
+                json.as_ptr(),
+            )
+        };
+        check_void_result("failed to set DetectionNetwork backend properties")
+    }
+
+    /// Sets the detection confidence threshold.
+    ///
+    /// A newly created group starts at `0.5`; archive configuration may replace
+    /// this value with model metadata.
+    pub fn set_confidence_threshold(&self, threshold: f32) -> Result<()> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_detection_network_set_confidence_threshold(self.node.handle(), threshold)
+        };
+        if let Some(err) = take_error_if_any("failed to set confidence threshold") {
+            Err(err)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Returns the detection confidence threshold.
+    pub fn confidence_threshold(&self) -> Result<f32> {
+        clear_error_flag();
+        let conf =
+            unsafe { depthai::dai_detection_network_get_confidence_threshold(self.node.handle()) };
+        if let Some(err) =
+            take_error_if_any("failed to get confidence threshold for DetectionNetwork")
+        {
+            Err(err)
+        } else {
+            Ok(conf)
+        }
+    }
+
+    /// Returns class names supplied by the configured model, archive, or parser.
+    ///
+    /// Returns `Ok(None)` before class names are configured or when the
+    /// configured model provides none.
+    pub fn classes(&self) -> Result<Option<Vec<String>>> {
+        clear_error_flag();
+        let json_c = unsafe { depthai::dai_detection_network_get_classes_json(self.node.handle()) };
+        if json_c.is_null() {
+            return Err(last_error("failed to get classes from DetectionNetwork"));
+        }
+        let json_str = unsafe {
+            std::ffi::CStr::from_ptr(json_c)
+                .to_string_lossy()
+                .into_owned()
+        };
+        unsafe { depthai::dai_free_cstring(json_c) };
+
+        if let Some(err) = take_error_if_any("failed to get classes from DetectionNetwork") {
+            return Err(err);
+        }
+        serde_json::from_str(&json_str)
+            .map_err(|e| DepthaiError::new(format!("failed to get classes: {e}")))
+    }
+}
+
 /// Detection parser family supported by DepthAI-Core.
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

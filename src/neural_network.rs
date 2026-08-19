@@ -400,6 +400,10 @@ pub struct NeuralNetworkNode {
 }
 
 impl NeuralNetworkNode {
+    pub(crate) fn from_node(node: crate::pipeline::Node) -> Self {
+        Self { node }
+    }
+
     /// Default inference input (`dai::node::NeuralNetwork::input`, named `in`).
     pub fn input(&self) -> Result<Input> {
         self.as_node().input("in")

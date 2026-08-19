@@ -531,8 +531,8 @@ pub use pipeline::Pipeline;
 
 pub use common::{CameraExposureOffset, CameraImageOrientation};
 pub use detection_network::{
-    DetectionKeypoint, DetectionNetworkType, DetectionParserNode, DetectionRotatedRect,
-    DetectionSegmentationMask, ImgDetection, ImgDetections,
+    DetectionKeypoint, DetectionNetworkNode, DetectionNetworkType, DetectionParserNode,
+    DetectionRotatedRect, DetectionSegmentationMask, ImgDetection, ImgDetections,
 };
 pub use encoded_frame::{EncodedFrame, EncodedFrameProfile, EncodedFrameQueue, EncodedFrameType};
 pub use gate::{GateControl, GateNode};

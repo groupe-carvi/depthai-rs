@@ -136,3 +136,11 @@ name = "video_encoder_rerun_h265"
 path = "examples/video_encoder_rerun_h265.rs"
 required-features = ["rerun"]
 
+[[example]]
+name = "detection_network_node"
+path = "examples/detection_network_node.rs"
+required-features = ["rerun", "v3-8-0"]
+
+[dev-dependencies]
+signal-hook = "0.3.18"
+tempfile = "3.27.0"

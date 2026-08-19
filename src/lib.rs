@@ -498,6 +498,7 @@ pub use depthai_macros::native_node_wrapper;
 
 pub mod camera;
 pub mod common;
+pub mod detection_network;
 pub mod device;
 pub mod encoded_frame;
 pub mod error;
@@ -529,6 +530,10 @@ pub use device::{
 pub use pipeline::Pipeline;
 
 pub use common::{CameraExposureOffset, CameraImageOrientation};
+pub use detection_network::{
+    DetectionKeypoint, DetectionRotatedRect, DetectionSegmentationMask, ImgDetection,
+    ImgDetections,
+};
 pub use encoded_frame::{EncodedFrame, EncodedFrameProfile, EncodedFrameQueue, EncodedFrameType};
 pub use gate::{GateControl, GateNode};
 pub use host_node::{Buffer, HostNode, HostNodeImpl, MessageGroup};

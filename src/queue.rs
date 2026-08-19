@@ -7,6 +7,7 @@ use autocxx::{c_int, c_uint, c_void as autocxx_c_void};
 use depthai_sys::{DaiDataQueue, DaiDatatype, DaiInputQueue, depthai};
 
 use crate::camera::ImageFrame;
+use crate::detection_network::ImgDetections;
 use crate::encoded_frame::EncodedFrame;
 use crate::error::{Result, clear_error_flag, last_error, take_error_if_any};
 use crate::host_node::{Buffer, MessageGroup};
@@ -285,6 +286,20 @@ impl Datatype {
             }
         } else {
             Ok(Some(MessageGroup::from_handle(h)))
+        }
+    }
+
+    pub fn as_img_detections(&self) -> Result<Option<ImgDetections>> {
+        clear_error_flag();
+        let handle = unsafe { depthai::dai_datatype_as_img_detections(self.handle) };
+        if handle.is_null() {
+            if let Some(error) = take_error_if_any("failed to cast datatype to ImgDetections") {
+                Err(error)
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(Some(ImgDetections::from_handle(handle)))
         }
     }
 

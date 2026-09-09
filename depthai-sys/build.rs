@@ -186,6 +186,21 @@ enum DepthaiCoreVersion {
 }
 
 impl DepthaiCoreVersion {
+    fn api_level(self) -> u32 {
+        match self {
+            DepthaiCoreVersion::Latest => LATEST_SUPPORTED_DEPTHAI_CORE_TAG.api_level(),
+            DepthaiCoreVersion::V3_8_0 => 30_800,
+            DepthaiCoreVersion::V3_7_1 => 30_701,
+            DepthaiCoreVersion::V3_6_1 => 30_601,
+            DepthaiCoreVersion::V3_5_0 => 30_500,
+            DepthaiCoreVersion::V3_4_0 => 30_400,
+            DepthaiCoreVersion::V3_3_0 => 30_300,
+            DepthaiCoreVersion::V3_2_1 => 30_201,
+            DepthaiCoreVersion::V3_2_0 => 30_200,
+            DepthaiCoreVersion::V3_1_0 => 30_100,
+        }
+    }
+
     fn tag(self) -> &'static str {
         match self {
             DepthaiCoreVersion::Latest => LATEST_SUPPORTED_DEPTHAI_CORE_TAG.tag(),
@@ -229,6 +244,23 @@ impl DepthaiCoreVersion {
                 opencv_version: "4.11.0",
                 world_dll: "opencv_world4110.dll",
             },
+        }
+    }
+
+    fn supports_detection_network_v3_8_contract(self) -> bool {
+        match self {
+            DepthaiCoreVersion::Latest => {
+                LATEST_SUPPORTED_DEPTHAI_CORE_TAG.supports_detection_network_v3_8_contract()
+            }
+            DepthaiCoreVersion::V3_8_0 => true,
+            DepthaiCoreVersion::V3_7_1
+            | DepthaiCoreVersion::V3_6_1
+            | DepthaiCoreVersion::V3_5_0
+            | DepthaiCoreVersion::V3_4_0
+            | DepthaiCoreVersion::V3_3_0
+            | DepthaiCoreVersion::V3_2_1
+            | DepthaiCoreVersion::V3_2_0
+            | DepthaiCoreVersion::V3_1_0 => false,
         }
     }
 }
@@ -408,8 +440,13 @@ fn main() {
         );
     }
 
-    let selected_tag = selected_depthai_core_tag();
+    let selected_version = selected_depthai_core_version();
+    let selected_tag = selected_version.tag();
     println_build!("Using DepthAI-Core tag: {}", selected_tag);
+    println!(
+        "cargo::metadata=CORE_API_LEVEL={}",
+        selected_version.api_level()
+    );
 
     if !no_native {
         #[cfg(feature = "native")]
@@ -457,7 +494,9 @@ fn main() {
         }
     };
     let out_dir = env::var("OUT_DIR").unwrap();
-    let target_dir = Path::new(&out_dir).ancestors().nth(3).unwrap();
+    // OUT_DIR is `<profile>/build/<package-hash>/out`; stage runtime files next to
+    // Cargo's executables in `<profile>`, including with a custom CARGO_TARGET_DIR.
+    let target_dir = Path::new(&out_dir).ancestors().nth(4).unwrap();
     let deps_dir = target_dir.join("deps");
     let examples_dir = target_dir.join("examples");
 
@@ -511,7 +550,11 @@ fn main() {
     let include_paths = build_with_autocxx(no_native);
     if !no_native {
         let opencv_enabled = env_bool("DEPTHAI_OPENCV_SUPPORT").unwrap_or(false);
-        build_cpp_wrapper(&include_paths, opencv_enabled);
+        build_cpp_wrapper(
+            &include_paths,
+            opencv_enabled,
+            selected_version.supports_detection_network_v3_8_contract(),
+        );
     }
 
     if target_os_is("windows") {
@@ -1269,7 +1312,11 @@ fn build_with_autocxx(no_native: bool) -> Vec<PathBuf> {
     include_paths
 }
 
-fn build_cpp_wrapper(include_paths: &[PathBuf], opencv_enabled: bool) {
+fn build_cpp_wrapper(
+    include_paths: &[PathBuf],
+    opencv_enabled: bool,
+    has_detection_network_v3_8: bool,
+) {
     println_build!("Building custom C++ wrapper sources...");
 
     // cc-rs respects CFLAGS/CXXFLAGS. On Windows/MSVC these are often set to GCC-style
@@ -1299,6 +1346,10 @@ fn build_cpp_wrapper(include_paths: &[PathBuf], opencv_enabled: bool) {
     cc_build
         .cpp(true)
         .std("c++17")
+        .define(
+            "DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8",
+            Some(if has_detection_network_v3_8 { "1" } else { "0" }),
+        )
         // NNData's typed add/getTensor helpers are conditionally declared by DepthAI-Core.
         // The native build uses the core default (DEPTHAI_XTENSOR_SUPPORT=ON), so expose the
         // same declarations while compiling our C++ wrapper.

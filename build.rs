@@ -1,9 +1,23 @@
 use std::{env, path::PathBuf};
 
 fn main() {
+    println!("cargo:rustc-check-cfg=cfg(depthai_core_ge_3_7)");
+    println!("cargo:rustc-check-cfg=cfg(depthai_core_ge_3_8)");
     // Ensure changes to vcpkg-installed libs re-trigger linkage when present.
     println!("cargo:rerun-if-env-changed=DEPTHAI_RPATH_DISABLE");
     println!("cargo:rerun-if-env-changed=DEP_DEPTHAI_CORE_CACHE_BUILD_DIR");
+    println!("cargo:rerun-if-env-changed=DEP_DEPTHAI_CORE_CORE_API_LEVEL");
+
+    let core_api_level = env::var("DEP_DEPTHAI_CORE_CORE_API_LEVEL")
+        .expect("depthai-sys did not publish its selected DepthAI-Core API level")
+        .parse::<u32>()
+        .expect("depthai-sys published an invalid DepthAI-Core API level");
+    if core_api_level >= 30_700 {
+        println!("cargo:rustc-cfg=depthai_core_ge_3_7");
+    }
+    if core_api_level >= 30_800 {
+        println!("cargo:rustc-cfg=depthai_core_ge_3_8");
+    }
 
     if env::var("DEPTHAI_RPATH_DISABLE").ok().as_deref() == Some("1") {
         return;

@@ -4,18 +4,37 @@
 //! tensor names, preprocessing, postprocessing, and product policy belong in
 //! downstream applications.
 
+use autocxx::c_int;
 use std::collections::BTreeMap;
 use std::ffi::{CStr, CString};
 use std::path::Path;
 use std::ptr;
 
-use depthai_sys::{DaiNNData, depthai};
+use depthai_sys::{DaiCameraNode, DaiNNData, depthai};
 use serde::Deserialize;
 
+use crate::NNModelDescription;
+use crate::camera::{CameraNode, ResizeMode};
 use crate::error::{DepthaiError, Result, clear_error_flag, last_error, take_error_if_any};
 use crate::host_node::Buffer;
 use crate::nn_archive::NNArchive;
 use crate::output::{Input, Output};
+
+/// On-device neural-depth model selection for RVC4 devices.
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceModelZoo {
+    NeuralDepth1248x780 = 0,
+    NeuralDepth768x480 = 1,
+    NeuralDepth576x360 = 2,
+    NeuralDepth480x300 = 3,
+    NeuralDepth384x240 = 4,
+    NeuralDepth1056x660 = 5,
+    NeuralDepth960x600 = 6,
+    NeuralDepth864x540 = 7,
+    NeuralDepth288x180 = 8,
+    NeuralDepth192x120 = 9,
+}
 
 /// Tensor element type used by `dai::TensorInfo`.
 #[repr(i32)]
@@ -252,6 +271,9 @@ impl NNData {
         }
 
         clear_error_flag();
+        if name.is_empty() {
+            return Err(DepthaiError::new(format!("tensor name must not be empty")));
+        }
         let name = CString::new(name).map_err(|_| DepthaiError::new("tensor name contains NUL"))?;
         let (strides, strides_len) = spec.strides.as_ref().map_or((ptr::null(), 0), |strides| {
             (strides.as_ptr(), strides.len())
@@ -378,6 +400,10 @@ pub struct NeuralNetworkNode {
 }
 
 impl NeuralNetworkNode {
+    pub(crate) fn from_node(node: crate::pipeline::Node) -> Self {
+        Self { node }
+    }
+
     /// Default inference input (`dai::node::NeuralNetwork::input`, named `in`).
     pub fn input(&self) -> Result<Input> {
         self.as_node().input("in")
@@ -385,12 +411,12 @@ impl NeuralNetworkNode {
 
     /// Retrieve one named entry from the node's `inputs` map.
     pub fn named_input(&self, name: &str) -> Result<Input> {
-        self.as_node().input_in_group("inputs", name)
+        self.as_node().input_in_map("inputs", name)
     }
 
     /// Retrieve one named entry from the node's `passthroughs` map.
     pub fn named_passthrough(&self, name: &str) -> Result<Output> {
-        self.as_node().output_in_group("passthroughs", name)
+        self.as_node().output_in_map("passthroughs", name)
     }
 
     pub fn set_nn_archive(&self, archive: &NNArchive) -> Result<()> {
@@ -498,6 +524,184 @@ impl NeuralNetworkNode {
         };
         check_void_result("failed to set NeuralNetwork backend properties")
     }
+
+    pub fn nn_archive(&self) -> Result<Option<NNArchive>> {
+        clear_error_flag();
+        let archive = unsafe { depthai::dai_neural_network_get_nn_archive(self.node.handle()) };
+        if let Some(err) = take_error_if_any("failed to get NNArchive") {
+            return Err(err);
+        }
+        if archive.is_null() {
+            return Ok(None);
+        }
+        Ok(Some(NNArchive::from_handle(archive)))
+    }
+
+    pub fn set_blob_path(&self, path: impl AsRef<Path>) -> Result<()> {
+        let path = path
+            .as_ref()
+            .to_str()
+            .ok_or_else(|| DepthaiError::new("blob path is not valid UTF-8"))?;
+        let path = CString::new(path).map_err(|_| DepthaiError::new("blob path contains NUL"))?;
+        clear_error_flag();
+        unsafe { depthai::dai_neural_network_set_blob_path(self.node.handle(), path.as_ptr()) };
+        check_void_result("failed to set NeuralNetwork blob path")
+    }
+
+    pub fn set_blob_bytes(&self, bytes: &[u8]) -> Result<()> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_neural_network_set_blob_bytes(
+                self.node.handle(),
+                bytes.as_ptr() as *const _,
+                bytes.len(),
+            )
+        };
+        check_void_result("failed to set blob bytes")
+    }
+
+    pub fn set_other_model_path(&self, path: impl AsRef<Path>) -> Result<()> {
+        let path = path
+            .as_ref()
+            .to_str()
+            .ok_or_else(|| DepthaiError::new("other model path is not valid UTF-8"))?;
+        let path =
+            CString::new(path).map_err(|_| DepthaiError::new("other model path contains NUL"))?;
+        clear_error_flag();
+        unsafe {
+            depthai::dai_neural_network_set_other_model_path(self.node.handle(), path.as_ptr())
+        };
+        check_void_result("failed to set NeuralNetwork other model path")
+    }
+
+    pub fn set_other_model_bytes(&self, bytes: &[u8]) -> Result<()> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_neural_network_set_other_model_bytes(
+                self.node.handle(),
+                bytes.as_ptr() as *const _,
+                bytes.len(),
+            )
+        };
+        check_void_result("failed to set other model bytes")
+    }
+
+    pub fn set_from_model_zoo(
+        &self,
+        description: &NNModelDescription,
+        use_cached: bool,
+    ) -> Result<()> {
+        let desc_json = serde_json::to_string(description).map_err(|e| {
+            DepthaiError::new(format!("failed to serialize model description: {e}"))
+        })?;
+        let desc_c = CString::new(desc_json)
+            .map_err(|_| DepthaiError::new("model description contains NUL"))?;
+
+        clear_error_flag();
+        unsafe {
+            depthai::dai_neural_network_set_from_model_zoo_json(
+                self.node.handle(),
+                desc_c.as_ptr(),
+                use_cached,
+            )
+        };
+        check_void_result("failed to set from model zoo")
+    }
+
+    pub fn set_model_from_device_zoo(&self, model: DeviceModelZoo) -> Result<()> {
+        clear_error_flag();
+        unsafe {
+            depthai::dai_neural_network_set_model_from_device_zoo(
+                self.node.handle(),
+                (model as i32).into(),
+            )
+        };
+        check_void_result("failed to set model from device zoo")
+    }
+
+    pub fn build_from_output(&self, output: &Output, archive: &NNArchive) -> Result<()> {
+        clear_error_flag();
+        let ok = unsafe {
+            depthai::dai_neural_network_build_from_output(
+                self.node.handle(),
+                output.handle(),
+                archive.handle(),
+            )
+        };
+
+        if ok {
+            Ok(())
+        } else {
+            Err(last_error(
+                "failed to build neural network node from output",
+            ))
+        }
+    }
+
+    pub fn build_from_camera_model(
+        &self,
+        camera: &CameraNode,
+        model: &NNModelDescription,
+        fps: Option<f32>,
+        resize_mode: Option<ResizeMode>,
+    ) -> Result<()> {
+        let model_json = serde_json::to_string(model).map_err(|e| {
+            DepthaiError::new(format!("failed to serialize model description: {e}"))
+        })?;
+        let model_c = CString::new(model_json)
+            .map_err(|_| DepthaiError::new("model description contains NUL"))?;
+        let fps_c = fps.unwrap_or(-1.0);
+        let resize_c = resize_mode.map(|mode| mode as i32).unwrap_or(-1);
+
+        clear_error_flag();
+        let ok = unsafe {
+            depthai::dai_neural_network_build_from_camera_model_json(
+                self.node.handle(),
+                camera.as_node().handle() as DaiCameraNode,
+                model_c.as_ptr(),
+                fps_c,
+                c_int(resize_c),
+            )
+        };
+
+        if ok {
+            Ok(())
+        } else {
+            Err(last_error(
+                "failed to build neural network from camera model",
+            ))
+        }
+    }
+
+    pub fn build_from_camera_archive(
+        &self,
+        camera: &CameraNode,
+        archive: &NNArchive,
+        fps: Option<f32>,
+        resize_mode: Option<ResizeMode>,
+    ) -> Result<()> {
+        let fps_c = fps.unwrap_or(-1.0);
+        let resize_c = resize_mode.map(|mode| mode as i32).unwrap_or(-1);
+
+        clear_error_flag();
+        let ok = unsafe {
+            depthai::dai_neural_network_build_from_camera_archive(
+                self.node.handle(),
+                camera.as_node().handle() as DaiCameraNode,
+                archive.handle(),
+                fps_c,
+                c_int(resize_c),
+            )
+        };
+
+        if ok {
+            Ok(())
+        } else {
+            Err(last_error(
+                "failed to build neural network from camera archive",
+            ))
+        }
+    }
 }
 
 fn check_void_result(context: &str) -> Result<()> {
@@ -583,7 +787,7 @@ mod tests {
         );
     }
 
-    #[cfg(any(feature = "v3-7-1", feature = "v3-8-0"))]
+    #[cfg(depthai_core_ge_3_7)]
     #[test]
     fn nn_data_round_trips_u16_on_core_3_7_and_newer() {
         let mut data = NNData::new().unwrap();

@@ -156,7 +156,7 @@ This table reflects what the Rust crates in this repo currently wrap and demonst
 |                             |           |                                                           |
 | `Multi-Device Pipeline`     |    🟡     |                                                           |
 | `Camera`                    |    🟢     | `examples/camera.rs`                                      |
-| `DetectionNetwork`          |    🔴     |                                                           |
+| `DetectionNetwork`          |    🟢     | Core v3.8.0; `examples/detection_network_node.rs`         |
 | `DynamicCalibration`        |    🔴     |                                                           |
 | `Events`                    |    🔴     |                                                           |
 | `FeatureTracker`            |    🔴     |                                                           |

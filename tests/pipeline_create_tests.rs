@@ -11,16 +11,15 @@ mod pipeline_create_tests {
     use depthai::pipeline::{DeviceNode, DeviceNodeWithParams};
 
     #[test]
-    #[ignore] // Requires hardware
     fn test_create_with_camera_node() {
         let pipeline = Pipeline::new().build().expect("Failed to create pipeline");
-        
+
         // Using the new generic create_with API for creating camera nodes
         // This is similar to C++: auto camera = pipeline.create<dai::node::Camera>();
         let camera = pipeline
             .create_with::<CameraNode, _>(CameraBoardSocket::CamA)
             .expect("Failed to create camera node");
-        
+
         // Verify we can configure the camera
         use depthai::camera::CameraOutputConfig;
         let config = CameraOutputConfig::new((640, 400));

@@ -17,9 +17,21 @@
 #include "XLink/XLink.h"
 #include "XLink/XLinkPublicDefines.h"
 
+#ifndef DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    #define DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8 0
+#endif
+
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    #include "depthai/capabilities/ImgFrameCapability.hpp"
+    #include "depthai/common/DetectionNetworkType.hpp"
+    #include "depthai/pipeline/datatype/ImgDetections.hpp"
+    #include "depthai/pipeline/node/DetectionNetwork.hpp"
+    #include "depthai/pipeline/node/DetectionParser.hpp"
+#endif
+
 // Some unrelated nodes were introduced after v3.1.0. Keep their existing guards so the rest of
-// the wrapper retains its historical behavior. NeuralNetwork bindings target the crate's last
-// supported core version (v3.6.1).
+// the wrapper retains its historical behavior. Newer DetectionNetwork/DetectionParser/ImgDetections
+// APIs are gated separately by DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8.
 #if defined(__has_include)
     #if __has_include(<depthai/pipeline/node/Rectification.hpp>)
         #include <depthai/pipeline/node/Rectification.hpp>
@@ -86,6 +98,7 @@
 static thread_local std::string last_error;
 
 namespace {
+
 template <typename T>
 struct _dai_is_std_optional : std::false_type {};
 
@@ -548,6 +561,21 @@ static bool select_first_device_info(dai::DeviceInfo& out) {
 }
 
 namespace dai {
+
+namespace {
+static void _dai_detection_contract_unavailable(const char* function_name);
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+static std::shared_ptr<dai::ImgDetections>* _dai_as_img_detections(DaiImgDetections detections, const char* context);
+static bool _dai_img_detections_mask_info(
+    const std::shared_ptr<dai::ImgDetections>& detections,
+    size_t data_size,
+    const char* context,
+    bool* present,
+    size_t* width,
+    size_t* height,
+    size_t* byte_length);
+#endif
+}
 
 const char* dai_build_version() {
     return dai::build::VERSION;
@@ -5545,6 +5573,326 @@ void dai_datatype_array_free(DaiDatatypeArray arr) {
     delete ptr;
 }
 
+DaiImgDetections dai_datatype_as_img_detections(DaiDatatype msg) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    if(!msg) {
+        last_error = "dai_datatype_as_img_detections: null msg";
+        return nullptr;
+    }
+    try {
+        auto ptr = static_cast<std::shared_ptr<dai::ADatatype>*>(msg);
+        if(!ptr->get() || !(*ptr)) {
+            last_error = "dai_datatype_as_img_detections: invalid datatype";
+            return nullptr;
+        }
+        auto detections = std::dynamic_pointer_cast<dai::ImgDetections>(*ptr);
+        if(!detections) return nullptr;
+        return static_cast<DaiImgDetections>(new std::shared_ptr<dai::ImgDetections>(std::move(detections)));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_datatype_as_img_detections failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    (void)msg;
+    _dai_detection_contract_unavailable("dai_datatype_as_img_detections");
+    return nullptr;
+#endif
+}
+
+DaiImgDetections dai_img_detections_new() {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    try {
+        return static_cast<DaiImgDetections>(new std::shared_ptr<dai::ImgDetections>(std::make_shared<dai::ImgDetections>()));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_img_detections_new failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    _dai_detection_contract_unavailable("dai_img_detections_new");
+    return nullptr;
+#endif
+}
+
+DaiImgDetections dai_img_detections_clone(DaiImgDetections detections) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* ptr = _dai_as_img_detections(detections, "dai_img_detections_clone");
+    if(!ptr) return nullptr;
+    try {
+        return static_cast<DaiImgDetections>(new std::shared_ptr<dai::ImgDetections>(*ptr));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_img_detections_clone failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    (void)detections;
+    _dai_detection_contract_unavailable("dai_img_detections_clone");
+    return nullptr;
+#endif
+}
+
+void dai_img_detections_release(DaiImgDetections detections) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    if(detections) {
+        delete static_cast<std::shared_ptr<dai::ImgDetections>*>(detections);
+    }
+#else
+    (void)detections;
+#endif
+}
+
+DaiBuffer dai_img_detections_as_buffer(DaiImgDetections detections) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* ptr = _dai_as_img_detections(detections, "dai_img_detections_as_buffer");
+    if(!ptr) return nullptr;
+    try {
+        std::shared_ptr<dai::Buffer> base = std::static_pointer_cast<dai::Buffer>(*ptr);
+        return static_cast<DaiBuffer>(new std::shared_ptr<dai::Buffer>(std::move(base)));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_img_detections_as_buffer failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    (void)detections;
+    _dai_detection_contract_unavailable("dai_img_detections_as_buffer");
+    return nullptr;
+#endif
+}
+
+DaiDatatype dai_img_detections_as_datatype(DaiImgDetections detections) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* ptr = _dai_as_img_detections(detections, "dai_img_detections_as_datatype");
+    if(!ptr) return nullptr;
+    try {
+        std::shared_ptr<dai::ADatatype> base = std::static_pointer_cast<dai::ADatatype>(*ptr);
+        return static_cast<DaiDatatype>(new std::shared_ptr<dai::ADatatype>(std::move(base)));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_img_detections_as_datatype failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    (void)detections;
+    _dai_detection_contract_unavailable("dai_img_detections_as_datatype");
+    return nullptr;
+#endif
+}
+
+bool dai_img_detections_get_count(DaiImgDetections detections, size_t* count) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* ptr = _dai_as_img_detections(detections, "dai_img_detections_get_count");
+    if(!ptr) return false;
+    if(!count) {
+        last_error = "dai_img_detections_get_count: null count output";
+        return false;
+    }
+    try {
+        *count = (*ptr)->detections.size();
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_img_detections_get_count failed: ") + e.what();
+        return false;
+    }
+#else
+    (void)detections;
+    (void)count;
+    _dai_detection_contract_unavailable("dai_img_detections_get_count");
+    return false;
+#endif
+}
+
+char* dai_img_detections_get_detections_json(DaiImgDetections detections) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* ptr = _dai_as_img_detections(detections, "dai_img_detections_get_detections_json");
+    if(!ptr) return nullptr;
+    try {
+        const auto values = (*ptr)->detections;
+        nlohmann::json result = nlohmann::json::array();
+        const auto require_finite = [](float value, const char* field) {
+            if(!std::isfinite(value)) {
+                throw std::runtime_error(std::string(field) + " must be finite");
+            }
+        };
+
+        for(const auto& detection : values) {
+            require_finite(detection.confidence, "detection confidence");
+            require_finite(detection.xmin, "detection xmin");
+            require_finite(detection.ymin, "detection ymin");
+            require_finite(detection.xmax, "detection xmax");
+            require_finite(detection.ymax, "detection ymax");
+
+            nlohmann::json item{
+                {"label", detection.label},
+                {"labelName", detection.labelName},
+                {"confidence", detection.confidence},
+                {"xmin", detection.xmin},
+                {"ymin", detection.ymin},
+                {"xmax", detection.xmax},
+                {"ymax", detection.ymax},
+                {"boundingBox", nullptr},
+                {"keypoints", nlohmann::json::array()},
+                {"edges", nlohmann::json::array()},
+            };
+
+            if(detection.boundingBox.has_value()) {
+                const auto& box = detection.boundingBox.value();
+                require_finite(box.center.x, "bounding-box center x");
+                require_finite(box.center.y, "bounding-box center y");
+                require_finite(box.size.width, "bounding-box width");
+                require_finite(box.size.height, "bounding-box height");
+                require_finite(box.angle, "bounding-box angle");
+                item["boundingBox"] = {
+                    {"centerX", box.center.x},
+                    {"centerY", box.center.y},
+                    {"centerNormalized", box.center.normalized},
+                    {"centerHasNormalized", box.center.hasNormalized},
+                    {"width", box.size.width},
+                    {"height", box.size.height},
+                    {"sizeNormalized", box.size.normalized},
+                    {"sizeHasNormalized", box.size.hasNormalized},
+                    {"angleDegreesClockwise", box.angle},
+                };
+            }
+
+            if(detection.keypoints.has_value()) {
+                const auto& keypoints = detection.keypoints.value();
+                for(const auto& keypoint : keypoints) {
+                    require_finite(keypoint.imageCoordinates.x, "keypoint x");
+                    require_finite(keypoint.imageCoordinates.y, "keypoint y");
+                    require_finite(keypoint.imageCoordinates.z, "keypoint z");
+                    require_finite(keypoint.confidence, "keypoint confidence");
+                    item["keypoints"].push_back({
+                        {"x", keypoint.imageCoordinates.x},
+                        {"y", keypoint.imageCoordinates.y},
+                        {"z", keypoint.imageCoordinates.z},
+                        {"confidence", keypoint.confidence},
+                        {"label", keypoint.label},
+                        {"labelName", keypoint.labelName},
+                    });
+                }
+
+                for(const auto& edge : keypoints.getEdges()) {
+                    if(edge[0] >= keypoints.size() || edge[1] >= keypoints.size()) {
+                        throw std::runtime_error("keypoint edge index out of range");
+                    }
+                    if(edge[0] == edge[1]) {
+                        throw std::runtime_error("self-loop keypoint edge is invalid");
+                    }
+                    item["edges"].push_back({edge[0], edge[1]});
+                }
+            }
+
+            result.push_back(std::move(item));
+        }
+
+        const auto serialized = result.dump();
+        auto* output = dai_string_to_cstring(serialized.c_str());
+        if(!output) {
+            last_error = "dai_img_detections_get_detections_json failed: unable to allocate output string";
+        }
+        return output;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_img_detections_get_detections_json failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    (void)detections;
+    _dai_detection_contract_unavailable("dai_img_detections_get_detections_json");
+    return nullptr;
+#endif
+}
+
+bool dai_img_detections_get_mask_info(DaiImgDetections detections,
+                                      bool* present,
+                                      size_t* width,
+                                      size_t* height,
+                                      size_t* byte_length) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* ptr = _dai_as_img_detections(detections, "dai_img_detections_get_mask_info");
+    if(!ptr) return false;
+    if(!present || !width || !height || !byte_length) {
+        last_error = "dai_img_detections_get_mask_info: null output pointer";
+        return false;
+    }
+    try {
+        const auto data = (*ptr)->getData();
+        return _dai_img_detections_mask_info(
+            *ptr,
+            data.size(),
+            "dai_img_detections_get_mask_info",
+            present,
+            width,
+            height,
+            byte_length);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_img_detections_get_mask_info failed: ") + e.what();
+        return false;
+    }
+#else
+    (void)detections;
+    (void)present;
+    (void)width;
+    (void)height;
+    (void)byte_length;
+    _dai_detection_contract_unavailable("dai_img_detections_get_mask_info");
+    return false;
+#endif
+}
+
+bool dai_img_detections_copy_mask(DaiImgDetections detections,
+                                  uint8_t* destination,
+                                  size_t capacity,
+                                  size_t* written) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* ptr = _dai_as_img_detections(detections, "dai_img_detections_copy_mask");
+    if(!ptr) return false;
+    if(!written) {
+        last_error = "dai_img_detections_copy_mask: null written output";
+        return false;
+    }
+    *written = 0;
+    try {
+        const auto data = (*ptr)->getData();
+        bool present = false;
+        size_t width = 0;
+        size_t height = 0;
+        size_t byte_length = 0;
+        if(!_dai_img_detections_mask_info(
+               *ptr,
+               data.size(),
+               "dai_img_detections_copy_mask",
+               &present,
+               &width,
+               &height,
+               &byte_length)) {
+            return false;
+        }
+        if(!present) {
+            return true;
+        }
+        if(capacity < byte_length) {
+            last_error = "dai_img_detections_copy_mask: destination capacity is too small";
+            return false;
+        }
+        if(!destination) {
+            last_error = "dai_img_detections_copy_mask: null destination";
+            return false;
+        }
+        std::memcpy(destination, data.data(), byte_length);
+        *written = byte_length;
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_img_detections_copy_mask failed: ") + e.what();
+        return false;
+    }
+#else
+    (void)detections;
+    (void)destination;
+    (void)capacity;
+    (void)written;
+    _dai_detection_contract_unavailable("dai_img_detections_copy_mask");
+    return false;
+#endif
+}
+
 // Low-level frame operations
 void* dai_frame_get_data(DaiImgFrame frame) {
     if (!frame) {
@@ -6386,6 +6734,95 @@ static dai::node::NeuralNetwork* _dai_as_neural_network(DaiNode node, const char
     return nn;
 }
 
+[[maybe_unused]] static void _dai_detection_contract_unavailable(const char* function_name) {
+    last_error = std::string(function_name) + ": DetectionNetwork FFI requires DepthAI-Core v3.8.0";
+}
+
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+static dai::node::DetectionNetwork* _dai_as_detection_network(DaiNode node, const char* context) {
+    if(!node) {
+        last_error = std::string(context) + ": null node";
+        return nullptr;
+    }
+    auto base = static_cast<dai::Node*>(node);
+    auto network = dynamic_cast<dai::node::DetectionNetwork*>(base);
+    if(!network) {
+        last_error = std::string(context) + ": node is not a DetectionNetwork";
+        return nullptr;
+    }
+    return network;
+}
+
+static dai::node::DetectionParser* _dai_as_detection_parser(DaiNode node, const char* context) {
+    if(!node) {
+        last_error = std::string(context) + ": null node";
+        return nullptr;
+    }
+    auto base = static_cast<dai::Node*>(node);
+    if(auto* parser = dynamic_cast<dai::node::DetectionParser*>(base)) {
+        return parser;
+    }
+    last_error = std::string(context) + ": node is not a DetectionParser";
+    return nullptr;
+}
+
+static std::shared_ptr<dai::ImgDetections>* _dai_as_img_detections(DaiImgDetections detections, const char* context) {
+    if(!detections) {
+        last_error = std::string(context) + ": null detections";
+        return nullptr;
+    }
+    auto ptr = static_cast<std::shared_ptr<dai::ImgDetections>*>(detections);
+    if(!ptr->get() || !(*ptr)) {
+        last_error = std::string(context) + ": invalid detections";
+        return nullptr;
+    }
+    return ptr;
+}
+
+static bool _dai_img_detections_mask_info(
+    const std::shared_ptr<dai::ImgDetections>& detections,
+    size_t data_size,
+    const char* context,
+    bool* present,
+    size_t* width,
+    size_t* height,
+    size_t* byte_length) {
+    if(!detections || !present || !width || !height || !byte_length) {
+        last_error = std::string(context) + ": invalid mask info arguments";
+        return false;
+    }
+    if(data_size == 0) {
+        *present = false;
+        *width = 0;
+        *height = 0;
+        *byte_length = 0;
+        return true;
+    }
+
+    const auto mask_width = detections->getSegmentationMaskWidth();
+    const auto mask_height = detections->getSegmentationMaskHeight();
+    if(mask_width == 0 || mask_height == 0) {
+        last_error = std::string(context) + ": non-empty mask requires non-zero width and height";
+        return false;
+    }
+    if(mask_width > std::numeric_limits<size_t>::max() / mask_height) {
+        last_error = std::string(context) + ": mask size overflow";
+        return false;
+    }
+    const size_t expected = mask_width * mask_height;
+    if(expected != data_size) {
+        last_error = std::string(context) + ": mask dimensions do not match byte length";
+        return false;
+    }
+
+    *present = true;
+    *width = mask_width;
+    *height = mask_height;
+    *byte_length = data_size;
+    return true;
+}
+#endif
+
 static std::shared_ptr<dai::NNArchive>* _dai_as_nn_archive(DaiNNArchive archive, const char* context) {
     if(!archive) {
         last_error = std::string(context) + ": null archive";
@@ -6397,6 +6834,53 @@ static std::shared_ptr<dai::NNArchive>* _dai_as_nn_archive(DaiNNArchive archive,
         return nullptr;
     }
     return ptr;
+}
+
+static bool _dai_openvino_blob_from_bytes(const void* data,
+                                          size_t len,
+                                          const char* context,
+                                          std::vector<uint8_t>* blob_bytes_out) {
+    if(!blob_bytes_out) {
+        last_error = std::string(context) + ": null blob bytes output";
+        return false;
+    }
+    if(!data && len > 0) {
+        last_error = std::string(context) + ": null data";
+        return false;
+    }
+    if(len < 8) {
+        last_error = std::string(context) + ": blob data must contain at least 8 bytes";
+        return false;
+    }
+    const auto* bytes = static_cast<const uint8_t*>(data);
+    blob_bytes_out->assign(bytes, bytes + len);
+    return true;
+}
+
+static bool _dai_backend_properties_from_json(const char* properties_json,
+                                              const char* context,
+                                              std::map<std::string, std::string>* properties_out) {
+    if(!properties_json) {
+        last_error = std::string(context) + ": null properties_json";
+        return false;
+    }
+    if(!properties_out) {
+        last_error = std::string(context) + ": null backend properties output";
+        return false;
+    }
+    auto json = nlohmann::json::parse(properties_json);
+    if(!json.is_object()) {
+        throw std::invalid_argument("backend properties JSON must be an object");
+    }
+    std::map<std::string, std::string> properties;
+    for(auto it = json.begin(); it != json.end(); ++it) {
+        if(!it.value().is_string()) {
+            throw std::invalid_argument("backend property values must be strings");
+        }
+        properties.emplace(it.key(), it.value().get<std::string>());
+    }
+    *properties_out = std::move(properties);
+    return true;
 }
 
 static std::shared_ptr<dai::NNData> _dai_as_nndata(DaiDatatype nndata, const char* context) {
@@ -6644,13 +7128,224 @@ static std::optional<float> _dai_optional_fps(float fps) {
     return fps > 0.0f ? std::optional<float>(fps) : std::nullopt;
 }
 
-static std::optional<dai::ImgResizeMode> _dai_optional_resize_mode(int resize_mode) {
+static std::optional<dai::ImgResizeMode> _dai_optional_resize_mode(int resize_mode, const char* context) {
     if(resize_mode < 0) return std::nullopt;
     if(resize_mode > static_cast<int>(dai::ImgResizeMode::LETTERBOX)) {
-        throw std::invalid_argument("Invalid NeuralNetwork resize mode");
+        throw std::invalid_argument(std::string(context) + ": invalid resize mode");
     }
     return static_cast<dai::ImgResizeMode>(resize_mode);
 }
+
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+static bool _dai_json_to_u32(const nlohmann::json& value, uint32_t* out, const char* context) {
+    if(!out) return false;
+    if(!value.is_number_integer() && !value.is_number_unsigned()) {
+        throw std::invalid_argument(std::string(context) + " must be an integer");
+    }
+    if(value.is_number_unsigned()) {
+        const auto unsigned_value = value.get<uint64_t>();
+        if(unsigned_value > std::numeric_limits<uint32_t>::max()) {
+            throw std::invalid_argument(std::string(context) + " is out of range for u32");
+        }
+        *out = static_cast<uint32_t>(unsigned_value);
+        return true;
+    }
+    const auto signed_value = value.get<int64_t>();
+    if(signed_value < 0 || static_cast<uint64_t>(signed_value) > std::numeric_limits<uint32_t>::max()) {
+        throw std::invalid_argument(std::string(context) + " is out of range for u32");
+    }
+    *out = static_cast<uint32_t>(signed_value);
+    return true;
+}
+
+static std::pair<uint32_t, uint32_t> _dai_json_to_u32_pair(const nlohmann::json& value, const char* context) {
+    if(!value.is_array() || value.size() != 2) {
+        throw std::invalid_argument(std::string(context) + " must be a [width,height] pair");
+    }
+    uint32_t first = 0;
+    uint32_t second = 0;
+    _dai_json_to_u32(value[0], &first, context);
+    _dai_json_to_u32(value[1], &second, context);
+    return {first, second};
+}
+
+static int _dai_json_to_i32(const nlohmann::json& value, const char* context) {
+    if(!value.is_number_integer() && !value.is_number_unsigned()) {
+        throw std::invalid_argument(std::string(context) + " must be an integer");
+    }
+    const auto signed_value = value.get<int64_t>();
+    if(signed_value < std::numeric_limits<int32_t>::min() || signed_value > std::numeric_limits<int32_t>::max()) {
+        throw std::invalid_argument(std::string(context) + " is out of range for i32");
+    }
+    return static_cast<int>(signed_value);
+}
+
+static bool _dai_valid_img_frame_type_raw(int raw_type) {
+    return raw_type >= 0 && raw_type <= static_cast<int>(dai::ImgFrame::Type::NONE);
+}
+
+static void _dai_validate_exact_keys(const nlohmann::json& object,
+                                     const std::vector<std::string>& allowed,
+                                     const char* context) {
+    if(!object.is_object()) {
+        throw std::invalid_argument(std::string(context) + " must be a JSON object");
+    }
+    for(auto it = object.begin(); it != object.end(); ++it) {
+        if(std::find(allowed.begin(), allowed.end(), it.key()) == allowed.end()) {
+            throw std::invalid_argument(std::string(context) + ": unknown field '" + it.key() + "'");
+        }
+    }
+}
+
+static bool _dai_img_frame_capability_from_json(const char* capability_json,
+                                                const char* context,
+                                                dai::ImgFrameCapability* capability_out) {
+    if(!capability_json) {
+        last_error = std::string(context) + ": null capability_json";
+        return false;
+    }
+    if(!capability_out) {
+        last_error = std::string(context) + ": null capability output";
+        return false;
+    }
+
+    auto root = nlohmann::json::parse(capability_json);
+    _dai_validate_exact_keys(
+        root,
+        {"size", "fps", "type", "resizeMode", "enableUndistortion", "ispOutput"},
+        "capability");
+
+    dai::ImgFrameCapability capability;
+    capability.size.value = std::nullopt;
+    capability.fps.value = std::nullopt;
+    capability.type = std::nullopt;
+    capability.resizeMode = dai::ImgResizeMode::CROP;
+    capability.enableUndistortion = std::nullopt;
+    capability.ispOutput = false;
+
+    if(root.contains("size")) {
+        const auto& size = root.at("size");
+        if(size.is_null()) {
+            capability.size.value = std::nullopt;
+        } else {
+            if(!size.contains("kind") || !size.at("kind").is_string()) {
+                throw std::invalid_argument("capability.size.kind must be a string");
+            }
+            const auto kind = size.at("kind").get<std::string>();
+            if(kind == "fixed") {
+                _dai_validate_exact_keys(size, {"kind", "value"}, "capability.size.fixed");
+                if(!size.contains("value")) {
+                    throw std::invalid_argument("capability.size fixed range requires value");
+                }
+                capability.size.fixed(_dai_json_to_u32_pair(size.at("value"), "capability.size.value"));
+            } else if(kind == "range") {
+                _dai_validate_exact_keys(size, {"kind", "min", "max"}, "capability.size.range");
+                if(!size.contains("min") || !size.contains("max")) {
+                    throw std::invalid_argument("capability.size range requires min and max");
+                }
+                capability.size.minMax(_dai_json_to_u32_pair(size.at("min"), "capability.size.min"),
+                                       _dai_json_to_u32_pair(size.at("max"), "capability.size.max"));
+            } else if(kind == "discrete") {
+                _dai_validate_exact_keys(size, {"kind", "values"}, "capability.size.discrete");
+                if(!size.contains("values") || !size.at("values").is_array()) {
+                    throw std::invalid_argument("capability.size discrete range requires values array");
+                }
+                std::vector<std::pair<uint32_t, uint32_t>> values;
+                values.reserve(size.at("values").size());
+                for(const auto& item : size.at("values")) {
+                    values.push_back(_dai_json_to_u32_pair(item, "capability.size.values[]"));
+                }
+                capability.size.discrete(values);
+            } else {
+                throw std::invalid_argument("capability.size.kind must be one of: fixed, range, discrete");
+            }
+        }
+    }
+
+    if(root.contains("fps")) {
+        const auto& fps = root.at("fps");
+        if(fps.is_null()) {
+            capability.fps.value = std::nullopt;
+        } else {
+            if(!fps.contains("kind") || !fps.at("kind").is_string()) {
+                throw std::invalid_argument("capability.fps.kind must be a string");
+            }
+            const auto kind = fps.at("kind").get<std::string>();
+            if(kind == "fixed") {
+                _dai_validate_exact_keys(fps, {"kind", "value"}, "capability.fps.fixed");
+                if(!fps.contains("value") || !fps.at("value").is_number()) {
+                    throw std::invalid_argument("capability.fps fixed range requires numeric value");
+                }
+                capability.fps.fixed(fps.at("value").get<float>());
+            } else if(kind == "range") {
+                _dai_validate_exact_keys(fps, {"kind", "min", "max"}, "capability.fps.range");
+                if(!fps.contains("min") || !fps.contains("max") || !fps.at("min").is_number() || !fps.at("max").is_number()) {
+                    throw std::invalid_argument("capability.fps range requires numeric min and max");
+                }
+                capability.fps.minMax(fps.at("min").get<float>(), fps.at("max").get<float>());
+            } else if(kind == "discrete") {
+                _dai_validate_exact_keys(fps, {"kind", "values"}, "capability.fps.discrete");
+                if(!fps.contains("values") || !fps.at("values").is_array()) {
+                    throw std::invalid_argument("capability.fps discrete range requires values array");
+                }
+                std::vector<float> values;
+                values.reserve(fps.at("values").size());
+                for(const auto& item : fps.at("values")) {
+                    if(!item.is_number()) {
+                        throw std::invalid_argument("capability.fps.values[] must be numbers");
+                    }
+                    values.push_back(item.get<float>());
+                }
+                capability.fps.discrete(values);
+            } else {
+                throw std::invalid_argument("capability.fps.kind must be one of: fixed, range, discrete");
+            }
+        }
+    }
+
+    if(root.contains("type")) {
+        const auto& type = root.at("type");
+        if(type.is_null()) {
+            capability.type = std::nullopt;
+        } else {
+            const auto raw_type = _dai_json_to_i32(type, "capability.type");
+            if(!_dai_valid_img_frame_type_raw(raw_type)) {
+                throw std::invalid_argument("capability.type is not a valid ImgFrame::Type value");
+            }
+            capability.type = static_cast<dai::ImgFrame::Type>(raw_type);
+        }
+    }
+
+    if(root.contains("resizeMode")) {
+        const auto raw_resize_mode = _dai_json_to_i32(root.at("resizeMode"), "capability.resizeMode");
+        if(raw_resize_mode < 0 || raw_resize_mode > static_cast<int>(dai::ImgResizeMode::LETTERBOX)) {
+            throw std::invalid_argument("capability.resizeMode must be 0, 1, or 2");
+        }
+        capability.resizeMode = static_cast<dai::ImgResizeMode>(raw_resize_mode);
+    }
+
+    if(root.contains("enableUndistortion")) {
+        const auto& undistortion = root.at("enableUndistortion");
+        if(undistortion.is_null()) {
+            capability.enableUndistortion = std::nullopt;
+        } else if(undistortion.is_boolean()) {
+            capability.enableUndistortion = undistortion.get<bool>();
+        } else {
+            throw std::invalid_argument("capability.enableUndistortion must be null or bool");
+        }
+    }
+
+    if(root.contains("ispOutput")) {
+        if(!root.at("ispOutput").is_boolean()) {
+            throw std::invalid_argument("capability.ispOutput must be bool");
+        }
+        capability.ispOutput = root.at("ispOutput").get<bool>();
+    }
+
+    *capability_out = std::move(capability);
+    return true;
+}
+#endif
 
 }  // namespace
 
@@ -6695,6 +7390,7 @@ DaiNNArchive dai_neural_network_get_nn_archive(DaiNode node) {
 }
 
 void dai_neural_network_set_from_model_zoo_json(DaiNode node, const char* description_json, bool use_cached) {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
     auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_from_model_zoo_json");
     if(!nn) return;
     if(!description_json) {
@@ -6726,17 +7422,10 @@ void dai_neural_network_set_blob_path(DaiNode node, const char* path) {
 void dai_neural_network_set_blob_bytes(DaiNode node, const void* data, size_t len) {
     auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_blob_bytes");
     if(!nn) return;
-    if(!data && len > 0) {
-        last_error = "dai_neural_network_set_blob_bytes: null data";
-        return;
-    }
-    if(len < 8) {
-        last_error = "dai_neural_network_set_blob_bytes: blob data must contain at least 8 bytes";
-        return;
-    }
     try {
-        const auto* bytes = static_cast<const uint8_t*>(data);
-        nn->setBlob(dai::OpenVINO::Blob(std::vector<uint8_t>(bytes, bytes + len)));
+        std::vector<uint8_t> blob_bytes;
+        if(!_dai_openvino_blob_from_bytes(data, len, "dai_neural_network_set_blob_bytes", &blob_bytes)) return;
+        nn->setBlob(dai::OpenVINO::Blob(std::move(blob_bytes)));
     } catch(const std::exception& e) {
         last_error = std::string("dai_neural_network_set_blob_bytes failed: ") + e.what();
     }
@@ -6857,21 +7546,13 @@ void dai_neural_network_set_backend(DaiNode node, const char* backend) {
 void dai_neural_network_set_backend_properties_json(DaiNode node, const char* properties_json) {
     auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_backend_properties_json");
     if(!nn) return;
-    if(!properties_json) {
-        last_error = "dai_neural_network_set_backend_properties_json: null properties_json";
-        return;
-    }
     try {
-        auto json = nlohmann::json::parse(properties_json);
-        if(!json.is_object()) {
-            throw std::invalid_argument("backend properties JSON must be an object");
-        }
         std::map<std::string, std::string> properties;
-        for(auto it = json.begin(); it != json.end(); ++it) {
-            if(!it.value().is_string()) {
-                throw std::invalid_argument("backend property values must be strings");
-            }
-            properties.emplace(it.key(), it.value().get<std::string>());
+        if(!_dai_backend_properties_from_json(
+               properties_json,
+               "dai_neural_network_set_backend_properties_json",
+               &properties)) {
+            return;
         }
         nn->setBackendProperties(std::move(properties));
     } catch(const std::exception& e) {
@@ -6917,6 +7598,7 @@ bool dai_neural_network_build_from_camera_model_json(DaiNode node,
                                                      const char* model_json,
                                                      float fps,
                                                      int resize_mode) {
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
     auto* nn = _dai_as_neural_network(node, "dai_neural_network_build_from_camera_model_json");
     if(!nn) return false;
     if(!model_json) {
@@ -6931,7 +7613,7 @@ bool dai_neural_network_build_from_camera_model_json(DaiNode node,
         nn->build(cam,
                   model,
                   _dai_optional_fps(fps),
-                  _dai_optional_resize_mode(resize_mode));
+                  _dai_optional_resize_mode(resize_mode, "dai_neural_network_build_from_camera_model_json"));
         return true;
     } catch(const std::exception& e) {
         last_error = std::string("dai_neural_network_build_from_camera_model_json failed: ") + e.what();
@@ -6954,12 +7636,1344 @@ bool dai_neural_network_build_from_camera_archive(DaiNode node,
         nn->build(cam,
                   model,
                   _dai_optional_fps(fps),
-                  _dai_optional_resize_mode(resize_mode));
+                  _dai_optional_resize_mode(resize_mode, "dai_neural_network_build_from_camera_archive"));
         return true;
     } catch(const std::exception& e) {
         last_error = std::string("dai_neural_network_build_from_camera_archive failed: ") + e.what();
         return false;
     }
+}
+
+// ---------------------------------------------------------------------------
+// DetectionNetwork / DetectionParser API (v3.8 contract)
+// ---------------------------------------------------------------------------
+
+DaiInput dai_detection_network_get_input(DaiNode node) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_get_input");
+    if(!network) return nullptr;
+    return static_cast<DaiInput>(&(network->input));
+#else
+    (void)node;
+    _dai_detection_contract_unavailable("dai_detection_network_get_input");
+    return nullptr;
+#endif
+}
+
+DaiOutput dai_detection_network_get_out(DaiNode node) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_get_out");
+    if(!network) return nullptr;
+    return static_cast<DaiOutput>(&(network->out));
+#else
+    (void)node;
+    _dai_detection_contract_unavailable("dai_detection_network_get_out");
+    return nullptr;
+#endif
+}
+
+DaiOutput dai_detection_network_get_out_network(DaiNode node) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_get_out_network");
+    if(!network) return nullptr;
+    return static_cast<DaiOutput>(&(network->outNetwork));
+#else
+    (void)node;
+    _dai_detection_contract_unavailable("dai_detection_network_get_out_network");
+    return nullptr;
+#endif
+}
+
+DaiOutput dai_detection_network_get_passthrough(DaiNode node) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_get_passthrough");
+    if(!network) return nullptr;
+    return static_cast<DaiOutput>(&(network->passthrough));
+#else
+    (void)node;
+    _dai_detection_contract_unavailable("dai_detection_network_get_passthrough");
+    return nullptr;
+#endif
+}
+
+DaiNode dai_detection_network_get_neural_network(DaiNode node) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_get_neural_network");
+    if(!network) return nullptr;
+    auto* neural = network->neuralNetwork.operator->();
+    if(!neural) {
+        last_error = "dai_detection_network_get_neural_network: invalid neuralNetwork subnode";
+        return nullptr;
+    }
+    auto* as_node = static_cast<dai::Node*>(neural);
+    return static_cast<DaiNode>(as_node);
+#else
+    (void)node;
+    _dai_detection_contract_unavailable("dai_detection_network_get_neural_network");
+    return nullptr;
+#endif
+}
+
+DaiNode dai_detection_network_get_detection_parser(DaiNode node) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_get_detection_parser");
+    if(!network) return nullptr;
+    auto* parser = network->detectionParser.operator->();
+    if(!parser) {
+        last_error = "dai_detection_network_get_detection_parser: invalid detectionParser subnode";
+        return nullptr;
+    }
+    auto* as_node = static_cast<dai::Node*>(parser);
+    return static_cast<DaiNode>(as_node);
+#else
+    (void)node;
+    _dai_detection_contract_unavailable("dai_detection_network_get_detection_parser");
+    return nullptr;
+#endif
+}
+
+void dai_detection_network_set_nn_archive(DaiNode node, DaiNNArchive archive) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_set_nn_archive");
+    auto* ar = _dai_as_nn_archive(archive, "dai_detection_network_set_nn_archive");
+    if(!network || !ar) return;
+    try {
+        network->setNNArchive(**ar);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_set_nn_archive failed: ") + e.what();
+    }
+#else
+    (void)node;
+    (void)archive;
+    _dai_detection_contract_unavailable("dai_detection_network_set_nn_archive");
+#endif
+}
+
+void dai_detection_network_set_nn_archive_with_shaves(DaiNode node, DaiNNArchive archive, int num_shaves) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_set_nn_archive_with_shaves");
+    auto* ar = _dai_as_nn_archive(archive, "dai_detection_network_set_nn_archive_with_shaves");
+    if(!network || !ar) return;
+    try {
+        network->setNNArchive(**ar, num_shaves);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_set_nn_archive_with_shaves failed: ") + e.what();
+    }
+#else
+    (void)node;
+    (void)archive;
+    (void)num_shaves;
+    _dai_detection_contract_unavailable("dai_detection_network_set_nn_archive_with_shaves");
+#endif
+}
+
+void dai_detection_network_set_from_model_zoo_json(DaiNode node, const char* description_json, bool use_cached) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_set_from_model_zoo_json");
+    if(!network) return;
+    if(!description_json) {
+        last_error = "dai_detection_network_set_from_model_zoo_json: null description_json";
+        return;
+    }
+    try {
+        auto description = nn_model_description_from_json(nlohmann::json::parse(description_json));
+        network->setFromModelZoo(std::move(description), use_cached);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_set_from_model_zoo_json failed: ") + e.what();
+    }
+#else
+    (void)node;
+    (void)description_json;
+    (void)use_cached;
+    _dai_detection_contract_unavailable("dai_detection_network_set_from_model_zoo_json");
+#endif
+}
+
+void dai_detection_network_set_blob_path(DaiNode node, const char* path) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_set_blob_path");
+    if(!network) return;
+    if(!path) {
+        last_error = "dai_detection_network_set_blob_path: null path";
+        return;
+    }
+    try {
+        network->setBlobPath(std::filesystem::u8path(path));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_set_blob_path failed: ") + e.what();
+    }
+#else
+    (void)node;
+    (void)path;
+    _dai_detection_contract_unavailable("dai_detection_network_set_blob_path");
+#endif
+}
+
+void dai_detection_network_set_blob_bytes(DaiNode node, const void* data, size_t len) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_set_blob_bytes");
+    if(!network) return;
+    try {
+        std::vector<uint8_t> blob_bytes;
+        if(!_dai_openvino_blob_from_bytes(data, len, "dai_detection_network_set_blob_bytes", &blob_bytes)) return;
+        network->setBlob(dai::OpenVINO::Blob(std::move(blob_bytes)));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_set_blob_bytes failed: ") + e.what();
+    }
+#else
+    (void)node;
+    (void)data;
+    (void)len;
+    _dai_detection_contract_unavailable("dai_detection_network_set_blob_bytes");
+#endif
+}
+
+void dai_detection_network_set_model_path(DaiNode node, const char* path) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_set_model_path");
+    if(!network) return;
+    if(!path) {
+        last_error = "dai_detection_network_set_model_path: null path";
+        return;
+    }
+    try {
+        network->setModelPath(std::filesystem::u8path(path));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_set_model_path failed: ") + e.what();
+    }
+#else
+    (void)node;
+    (void)path;
+    _dai_detection_contract_unavailable("dai_detection_network_set_model_path");
+#endif
+}
+
+void dai_detection_network_set_num_pool_frames(DaiNode node, int num_frames) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_set_num_pool_frames");
+    if(!network) return;
+    try {
+        network->setNumPoolFrames(num_frames);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_set_num_pool_frames failed: ") + e.what();
+    }
+#else
+    (void)node;
+    (void)num_frames;
+    _dai_detection_contract_unavailable("dai_detection_network_set_num_pool_frames");
+#endif
+}
+
+void dai_detection_network_set_num_inference_threads(DaiNode node, int num_threads) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_set_num_inference_threads");
+    if(!network) return;
+    try {
+        network->setNumInferenceThreads(num_threads);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_set_num_inference_threads failed: ") + e.what();
+    }
+#else
+    (void)node;
+    (void)num_threads;
+    _dai_detection_contract_unavailable("dai_detection_network_set_num_inference_threads");
+#endif
+}
+
+int dai_detection_network_get_num_inference_threads(DaiNode node) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_get_num_inference_threads");
+    if(!network) return -1;
+    try {
+        return network->getNumInferenceThreads();
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_get_num_inference_threads failed: ") + e.what();
+        return -1;
+    }
+#else
+    (void)node;
+    _dai_detection_contract_unavailable("dai_detection_network_get_num_inference_threads");
+    return -1;
+#endif
+}
+
+void dai_detection_network_set_num_nce_per_inference_thread(DaiNode node, int num_nce_per_thread) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_set_num_nce_per_inference_thread");
+    if(!network) return;
+    try {
+        network->setNumNCEPerInferenceThread(num_nce_per_thread);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_set_num_nce_per_inference_thread failed: ") + e.what();
+    }
+#else
+    (void)node;
+    (void)num_nce_per_thread;
+    _dai_detection_contract_unavailable("dai_detection_network_set_num_nce_per_inference_thread");
+#endif
+}
+
+void dai_detection_network_set_num_shaves_per_inference_thread(DaiNode node, int num_shaves_per_thread) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_set_num_shaves_per_inference_thread");
+    if(!network) return;
+    try {
+        network->setNumShavesPerInferenceThread(num_shaves_per_thread);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_set_num_shaves_per_inference_thread failed: ") + e.what();
+    }
+#else
+    (void)node;
+    (void)num_shaves_per_thread;
+    _dai_detection_contract_unavailable("dai_detection_network_set_num_shaves_per_inference_thread");
+#endif
+}
+
+void dai_detection_network_set_backend(DaiNode node, const char* backend) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_set_backend");
+    if(!network) return;
+    if(!backend) {
+        last_error = "dai_detection_network_set_backend: null backend";
+        return;
+    }
+    try {
+        network->setBackend(std::string(backend));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_set_backend failed: ") + e.what();
+    }
+#else
+    (void)node;
+    (void)backend;
+    _dai_detection_contract_unavailable("dai_detection_network_set_backend");
+#endif
+}
+
+void dai_detection_network_set_backend_properties_json(DaiNode node, const char* properties_json) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_set_backend_properties_json");
+    if(!network) return;
+    try {
+        std::map<std::string, std::string> properties;
+        if(!_dai_backend_properties_from_json(
+               properties_json,
+               "dai_detection_network_set_backend_properties_json",
+               &properties)) {
+            return;
+        }
+        network->setBackendProperties(std::move(properties));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_set_backend_properties_json failed: ") + e.what();
+    }
+#else
+    (void)node;
+    (void)properties_json;
+    _dai_detection_contract_unavailable("dai_detection_network_set_backend_properties_json");
+#endif
+}
+
+void dai_detection_network_set_confidence_threshold(DaiNode node, float threshold) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_set_confidence_threshold");
+    if(!network) return;
+    try {
+        network->setConfidenceThreshold(threshold);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_set_confidence_threshold failed: ") + e.what();
+    }
+#else
+    (void)node;
+    (void)threshold;
+    _dai_detection_contract_unavailable("dai_detection_network_set_confidence_threshold");
+#endif
+}
+
+float dai_detection_network_get_confidence_threshold(DaiNode node) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_get_confidence_threshold");
+    if(!network) return 0.0f;
+    try {
+        return network->getConfidenceThreshold();
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_get_confidence_threshold failed: ") + e.what();
+        return 0.0f;
+    }
+#else
+    (void)node;
+    _dai_detection_contract_unavailable("dai_detection_network_get_confidence_threshold");
+    return 0.0f;
+#endif
+}
+
+char* dai_detection_network_get_classes_json(DaiNode node) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_get_classes_json");
+    if(!network) return nullptr;
+    try {
+        auto classes = network->getClasses();
+        if(!classes.has_value()) {
+            return dai_string_to_cstring("null");
+        }
+        return dai_string_to_cstring(nlohmann::json(*classes).dump().c_str());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_get_classes_json failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    (void)node;
+    _dai_detection_contract_unavailable("dai_detection_network_get_classes_json");
+    return nullptr;
+#endif
+}
+
+bool dai_detection_network_build_from_output(DaiNode node, DaiOutput input, DaiNNArchive archive) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_build_from_output");
+    auto* ar = _dai_as_nn_archive(archive, "dai_detection_network_build_from_output");
+    if(!network || !ar) return false;
+    if(!input) {
+        last_error = "dai_detection_network_build_from_output: null input";
+        return false;
+    }
+    try {
+        auto* output = static_cast<dai::Node::Output*>(input);
+        network->build(*output, **ar);
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_build_from_output failed: ") + e.what();
+        return false;
+    }
+#else
+    (void)node;
+    (void)input;
+    (void)archive;
+    _dai_detection_contract_unavailable("dai_detection_network_build_from_output");
+    return false;
+#endif
+}
+
+bool dai_detection_network_build_from_camera_model_json(DaiNode node,
+                                                        DaiCameraNode camera,
+                                                        const char* model_json,
+                                                        float fps,
+                                                        int resize_mode) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_build_from_camera_model_json");
+    if(!network) return false;
+    if(!model_json) {
+        last_error = "dai_detection_network_build_from_camera_model_json: null model_json";
+        return false;
+    }
+    try {
+        auto cam = _dai_as_camera(camera, "dai_detection_network_build_from_camera_model_json");
+        if(!cam) return false;
+        auto description = nn_model_description_from_json(nlohmann::json::parse(model_json));
+        dai::node::DetectionNetwork::Model model{std::move(description)};
+        network->build(cam,
+                       model,
+                       _dai_optional_fps(fps),
+                       _dai_optional_resize_mode(resize_mode, "dai_detection_network_build_from_camera_model_json"));
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_build_from_camera_model_json failed: ") + e.what();
+        return false;
+    }
+#else
+    (void)node;
+    (void)camera;
+    (void)model_json;
+    (void)fps;
+    (void)resize_mode;
+    _dai_detection_contract_unavailable("dai_detection_network_build_from_camera_model_json");
+    return false;
+#endif
+}
+
+bool dai_detection_network_build_from_camera_archive(DaiNode node,
+                                                     DaiCameraNode camera,
+                                                     DaiNNArchive archive,
+                                                     float fps,
+                                                     int resize_mode) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_build_from_camera_archive");
+    auto* ar = _dai_as_nn_archive(archive, "dai_detection_network_build_from_camera_archive");
+    if(!network || !ar) return false;
+    try {
+        auto cam = _dai_as_camera(camera, "dai_detection_network_build_from_camera_archive");
+        if(!cam) return false;
+        dai::node::DetectionNetwork::Model model{**ar};
+        network->build(cam,
+                       model,
+                       _dai_optional_fps(fps),
+                       _dai_optional_resize_mode(resize_mode, "dai_detection_network_build_from_camera_archive"));
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_build_from_camera_archive failed: ") + e.what();
+        return false;
+    }
+#else
+    (void)node;
+    (void)camera;
+    (void)archive;
+    (void)fps;
+    (void)resize_mode;
+    _dai_detection_contract_unavailable("dai_detection_network_build_from_camera_archive");
+    return false;
+#endif
+}
+
+bool dai_detection_network_build_from_camera_model_capability_json(DaiNode node,
+                                                                   DaiCameraNode camera,
+                                                                   const char* model_json,
+                                                                   const char* capability_json) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    std::lock_guard<std::mutex> lock(g_modelzoo_mutex);
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_build_from_camera_model_capability_json");
+    if(!network) return false;
+    if(!model_json) {
+        last_error = "dai_detection_network_build_from_camera_model_capability_json: null model_json";
+        return false;
+    }
+    try {
+        auto cam = _dai_as_camera(camera, "dai_detection_network_build_from_camera_model_capability_json");
+        if(!cam) return false;
+        dai::ImgFrameCapability capability;
+        if(!_dai_img_frame_capability_from_json(
+               capability_json,
+               "dai_detection_network_build_from_camera_model_capability_json",
+               &capability)) {
+            return false;
+        }
+        auto description = nn_model_description_from_json(nlohmann::json::parse(model_json));
+        dai::node::DetectionNetwork::Model model{std::move(description)};
+        network->build(cam, model, capability);
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_build_from_camera_model_capability_json failed: ") + e.what();
+        return false;
+    }
+#else
+    (void)node;
+    (void)camera;
+    (void)model_json;
+    (void)capability_json;
+    _dai_detection_contract_unavailable("dai_detection_network_build_from_camera_model_capability_json");
+    return false;
+#endif
+}
+
+bool dai_detection_network_build_from_camera_archive_capability_json(DaiNode node,
+                                                                     DaiCameraNode camera,
+                                                                     DaiNNArchive archive,
+                                                                     const char* capability_json) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* network = _dai_as_detection_network(node, "dai_detection_network_build_from_camera_archive_capability_json");
+    auto* ar = _dai_as_nn_archive(archive, "dai_detection_network_build_from_camera_archive_capability_json");
+    if(!network || !ar) return false;
+    try {
+        auto cam = _dai_as_camera(camera, "dai_detection_network_build_from_camera_archive_capability_json");
+        if(!cam) return false;
+        dai::ImgFrameCapability capability;
+        if(!_dai_img_frame_capability_from_json(
+               capability_json,
+               "dai_detection_network_build_from_camera_archive_capability_json",
+               &capability)) {
+            return false;
+        }
+        dai::node::DetectionNetwork::Model model{**ar};
+        network->build(cam, model, capability);
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_network_build_from_camera_archive_capability_json failed: ") + e.what();
+        return false;
+    }
+#else
+    (void)node;
+    (void)camera;
+    (void)archive;
+    (void)capability_json;
+    _dai_detection_contract_unavailable("dai_detection_network_build_from_camera_archive_capability_json");
+    return false;
+#endif
+}
+
+bool dai_detection_parser_build_from_output(DaiNode parser, DaiOutput input, DaiNNArchive archive) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_build_from_output");
+    auto* ar = _dai_as_nn_archive(archive, "dai_detection_parser_build_from_output");
+    if(!node || !ar) return false;
+    if(!input) {
+        last_error = "dai_detection_parser_build_from_output: null input";
+        return false;
+    }
+    try {
+        auto* output = static_cast<dai::Node::Output*>(input);
+        node->build(*output, **ar);
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_build_from_output failed: ") + e.what();
+        return false;
+    }
+#else
+    (void)parser;
+    (void)input;
+    (void)archive;
+    _dai_detection_contract_unavailable("dai_detection_parser_build_from_output");
+    return false;
+#endif
+}
+
+void dai_detection_parser_set_num_frames_pool(DaiNode parser, int num_frames) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_num_frames_pool");
+    if(!node) return;
+    try {
+        node->setNumFramesPool(num_frames);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_num_frames_pool failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)num_frames;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_num_frames_pool");
+#endif
+}
+
+int dai_detection_parser_get_num_frames_pool(DaiNode parser) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_get_num_frames_pool");
+    if(!node) return -1;
+    try {
+        return node->getNumFramesPool();
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_get_num_frames_pool failed: ") + e.what();
+        return -1;
+    }
+#else
+    (void)parser;
+    _dai_detection_contract_unavailable("dai_detection_parser_get_num_frames_pool");
+    return -1;
+#endif
+}
+
+void dai_detection_parser_set_nn_archive(DaiNode parser, DaiNNArchive archive) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_nn_archive");
+    auto* ar = _dai_as_nn_archive(archive, "dai_detection_parser_set_nn_archive");
+    if(!node || !ar) return;
+    try {
+        node->setNNArchive(**ar);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_nn_archive failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)archive;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_nn_archive");
+#endif
+}
+
+void dai_detection_parser_set_model_path(DaiNode parser, const char* path) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_model_path");
+    if(!node) return;
+    if(!path) {
+        last_error = "dai_detection_parser_set_model_path: null path";
+        return;
+    }
+    try {
+        node->setModelPath(std::filesystem::u8path(path));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_model_path failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)path;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_model_path");
+#endif
+}
+
+void dai_detection_parser_set_blob_path(DaiNode parser, const char* path) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_blob_path");
+    if(!node) return;
+    if(!path) {
+        last_error = "dai_detection_parser_set_blob_path: null path";
+        return;
+    }
+    try {
+        node->setBlobPath(std::filesystem::u8path(path));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_blob_path failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)path;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_blob_path");
+#endif
+}
+
+void dai_detection_parser_set_blob_bytes(DaiNode parser, const void* data, size_t len) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_blob_bytes");
+    if(!node) return;
+    try {
+        std::vector<uint8_t> blob_bytes;
+        if(!_dai_openvino_blob_from_bytes(data, len, "dai_detection_parser_set_blob_bytes", &blob_bytes)) return;
+        node->setBlob(dai::OpenVINO::Blob(std::move(blob_bytes)));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_blob_bytes failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)data;
+    (void)len;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_blob_bytes");
+#endif
+}
+
+void dai_detection_parser_set_input_image_size(DaiNode parser, int width, int height) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_input_image_size");
+    if(!node) return;
+    if(width <= 0 || height <= 0) {
+        last_error = "dai_detection_parser_set_input_image_size: width and height must be positive";
+        return;
+    }
+    try {
+        node->setInputImageSize(width, height);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_input_image_size failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)width;
+    (void)height;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_input_image_size");
+#endif
+}
+
+void dai_detection_parser_set_nn_family(DaiNode parser, int family) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    if(family != 0 && family != 1) {
+        last_error = "dai_detection_parser_set_nn_family: invalid family (expected 0=YOLO or 1=MOBILENET)";
+        return;
+    }
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_nn_family");
+    if(!node) return;
+    try {
+        node->setNNFamily(static_cast<DetectionNetworkType>(family));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_nn_family failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)family;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_nn_family");
+#endif
+}
+
+int dai_detection_parser_get_nn_family(DaiNode parser) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_get_nn_family");
+    if(!node) return -1;
+    try {
+        return static_cast<int>(node->getNNFamily());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_get_nn_family failed: ") + e.what();
+        return -1;
+    }
+#else
+    (void)parser;
+    _dai_detection_contract_unavailable("dai_detection_parser_get_nn_family");
+    return -1;
+#endif
+}
+
+void dai_detection_parser_set_confidence_threshold(DaiNode parser, float threshold) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_confidence_threshold");
+    if(!node) return;
+    try {
+        node->setConfidenceThreshold(threshold);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_confidence_threshold failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)threshold;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_confidence_threshold");
+#endif
+}
+
+float dai_detection_parser_get_confidence_threshold(DaiNode parser) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_get_confidence_threshold");
+    if(!node) return 0.0f;
+    try {
+        return node->getConfidenceThreshold();
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_get_confidence_threshold failed: ") + e.what();
+        return 0.0f;
+    }
+#else
+    (void)parser;
+    _dai_detection_contract_unavailable("dai_detection_parser_get_confidence_threshold");
+    return 0.0f;
+#endif
+}
+
+void dai_detection_parser_set_num_classes(DaiNode parser, int num_classes) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_num_classes");
+    if(!node) return;
+    try {
+        node->setNumClasses(num_classes);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_num_classes failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)num_classes;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_num_classes");
+#endif
+}
+
+int dai_detection_parser_get_num_classes(DaiNode parser) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_get_num_classes");
+    if(!node) return -1;
+    try {
+        return node->getNumClasses();
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_get_num_classes failed: ") + e.what();
+        return -1;
+    }
+#else
+    (void)parser;
+    _dai_detection_contract_unavailable("dai_detection_parser_get_num_classes");
+    return -1;
+#endif
+}
+
+void dai_detection_parser_set_coordinate_size(DaiNode parser, int coordinate_size) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_coordinate_size");
+    if(!node) return;
+    try {
+        node->setCoordinateSize(coordinate_size);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_coordinate_size failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)coordinate_size;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_coordinate_size");
+#endif
+}
+
+int dai_detection_parser_get_coordinate_size(DaiNode parser) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_get_coordinate_size");
+    if(!node) return -1;
+    try {
+        return node->getCoordinateSize();
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_get_coordinate_size failed: ") + e.what();
+        return -1;
+    }
+#else
+    (void)parser;
+    _dai_detection_contract_unavailable("dai_detection_parser_get_coordinate_size");
+    return -1;
+#endif
+}
+
+void dai_detection_parser_set_iou_threshold(DaiNode parser, float threshold) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_iou_threshold");
+    if(!node) return;
+    try {
+        node->setIouThreshold(threshold);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_iou_threshold failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)threshold;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_iou_threshold");
+#endif
+}
+
+float dai_detection_parser_get_iou_threshold(DaiNode parser) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_get_iou_threshold");
+    if(!node) return 0.0f;
+    try {
+        return node->getIouThreshold();
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_get_iou_threshold failed: ") + e.what();
+        return 0.0f;
+    }
+#else
+    (void)parser;
+    _dai_detection_contract_unavailable("dai_detection_parser_get_iou_threshold");
+    return 0.0f;
+#endif
+}
+
+void dai_detection_parser_set_subtype(DaiNode parser, const char* subtype) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_subtype");
+    if(!node) return;
+    if(!subtype) {
+        last_error = "dai_detection_parser_set_subtype: null subtype";
+        return;
+    }
+    try {
+        node->setSubtype(std::string(subtype));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_subtype failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)subtype;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_subtype");
+#endif
+}
+
+char* dai_detection_parser_get_subtype(DaiNode parser) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_get_subtype");
+    if(!node) return nullptr;
+    try {
+        return dai_string_to_cstring(node->getSubtype().c_str());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_get_subtype failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    (void)parser;
+    _dai_detection_contract_unavailable("dai_detection_parser_get_subtype");
+    return nullptr;
+#endif
+}
+
+void dai_detection_parser_set_decode_keypoints(DaiNode parser, bool decode) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_decode_keypoints");
+    if(!node) return;
+    try {
+        node->setDecodeKeypoints(decode);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_decode_keypoints failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)decode;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_decode_keypoints");
+#endif
+}
+
+bool dai_detection_parser_get_decode_keypoints(DaiNode parser) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_get_decode_keypoints");
+    if(!node) return false;
+    try {
+        return node->getDecodeKeypoints();
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_get_decode_keypoints failed: ") + e.what();
+        return false;
+    }
+#else
+    (void)parser;
+    _dai_detection_contract_unavailable("dai_detection_parser_get_decode_keypoints");
+    return false;
+#endif
+}
+
+void dai_detection_parser_set_decode_segmentation(DaiNode parser, bool decode) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_decode_segmentation");
+    if(!node) return;
+    try {
+        node->setDecodeSegmentation(decode);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_decode_segmentation failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)decode;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_decode_segmentation");
+#endif
+}
+
+bool dai_detection_parser_get_decode_segmentation(DaiNode parser) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_get_decode_segmentation");
+    if(!node) return false;
+    try {
+        return node->getDecodeSegmentation();
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_get_decode_segmentation failed: ") + e.what();
+        return false;
+    }
+#else
+    (void)parser;
+    _dai_detection_contract_unavailable("dai_detection_parser_get_decode_segmentation");
+    return false;
+#endif
+}
+
+void dai_detection_parser_set_num_keypoints(DaiNode parser, int num_keypoints) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_num_keypoints");
+    if(!node) return;
+    try {
+        node->setNumKeypoints(num_keypoints);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_num_keypoints failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)num_keypoints;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_num_keypoints");
+#endif
+}
+
+int dai_detection_parser_get_num_keypoints(DaiNode parser) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_get_num_keypoints");
+    if(!node) return -1;
+    try {
+        return node->getNKeypoints();
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_get_num_keypoints failed: ") + e.what();
+        return -1;
+    }
+#else
+    (void)parser;
+    _dai_detection_contract_unavailable("dai_detection_parser_get_num_keypoints");
+    return -1;
+#endif
+}
+
+void dai_detection_parser_set_run_on_host(DaiNode parser, bool run_on_host) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_run_on_host");
+    if(!node) return;
+    try {
+        node->setRunOnHost(run_on_host);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_run_on_host failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)run_on_host;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_run_on_host");
+#endif
+}
+
+bool dai_detection_parser_run_on_host(DaiNode parser) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_run_on_host");
+    if(!node) return false;
+    try {
+        return node->runOnHost();
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_run_on_host failed: ") + e.what();
+        return false;
+    }
+#else
+    (void)parser;
+    _dai_detection_contract_unavailable("dai_detection_parser_run_on_host");
+    return false;
+#endif
+}
+
+void dai_detection_parser_set_classes_json(DaiNode parser, const char* classes_json) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_classes_json");
+    if(!node) return;
+    if(!classes_json) {
+        last_error = "dai_detection_parser_set_classes_json: null classes_json";
+        return;
+    }
+    try {
+        auto json = nlohmann::json::parse(classes_json);
+        if(!json.is_array()) {
+            throw std::invalid_argument("classes JSON must be an array");
+        }
+        std::vector<std::string> classes;
+        classes.reserve(json.size());
+        for(const auto& value : json) {
+            if(!value.is_string()) {
+                throw std::invalid_argument("classes JSON values must be strings");
+            }
+            classes.push_back(value.get<std::string>());
+        }
+        node->setClasses(classes);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_classes_json failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)classes_json;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_classes_json");
+#endif
+}
+
+char* dai_detection_parser_get_classes_json(DaiNode parser) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_get_classes_json");
+    if(!node) return nullptr;
+    try {
+        auto classes = node->getClasses();
+        if(!classes.has_value()) return dai_string_to_cstring("null");
+        return dai_string_to_cstring(nlohmann::json(*classes).dump().c_str());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_get_classes_json failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    (void)parser;
+    _dai_detection_contract_unavailable("dai_detection_parser_get_classes_json");
+    return nullptr;
+#endif
+}
+
+void dai_detection_parser_set_anchors_legacy_json(DaiNode parser, const char* anchors_json) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_anchors_legacy_json");
+    if(!node) return;
+    if(!anchors_json) {
+        last_error = "dai_detection_parser_set_anchors_legacy_json: null anchors_json";
+        return;
+    }
+    try {
+        auto json = nlohmann::json::parse(anchors_json);
+        if(!json.is_array()) {
+            throw std::invalid_argument("anchors JSON must be an array");
+        }
+        std::vector<float> anchors;
+        anchors.reserve(json.size());
+        for(const auto& value : json) {
+            if(!value.is_number()) {
+                throw std::invalid_argument("anchors JSON values must be numbers");
+            }
+            anchors.push_back(value.get<float>());
+        }
+        node->setAnchors(anchors);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_anchors_legacy_json failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)anchors_json;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_anchors_legacy_json");
+#endif
+}
+
+char* dai_detection_parser_get_anchors_json(DaiNode parser) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_get_anchors_json");
+    if(!node) return nullptr;
+    try {
+        return dai_string_to_cstring(nlohmann::json(node->getAnchors()).dump().c_str());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_get_anchors_json failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    (void)parser;
+    _dai_detection_contract_unavailable("dai_detection_parser_get_anchors_json");
+    return nullptr;
+#endif
+}
+
+void dai_detection_parser_set_anchors_v2_json(DaiNode parser, const char* anchors_json) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_anchors_v2_json");
+    if(!node) return;
+    if(!anchors_json) {
+        last_error = "dai_detection_parser_set_anchors_v2_json: null anchors_json";
+        return;
+    }
+    try {
+        auto json = nlohmann::json::parse(anchors_json);
+        if(!json.is_array()) {
+            throw std::invalid_argument("anchorsV2 JSON must be an array of layers");
+        }
+        std::vector<std::vector<std::vector<float>>> anchors_v2;
+        anchors_v2.reserve(json.size());
+        for(const auto& layer : json) {
+            if(!layer.is_array()) {
+                throw std::invalid_argument("anchorsV2 JSON layer must be an array");
+            }
+            std::vector<std::vector<float>> layer_values;
+            layer_values.reserve(layer.size());
+            for(const auto& anchor : layer) {
+                if(!anchor.is_array() || anchor.size() != 2) {
+                    throw std::invalid_argument("anchorsV2 JSON anchor must be a [width,height] pair");
+                }
+                std::vector<float> pair;
+                pair.reserve(2);
+                for(const auto& dim : anchor) {
+                    if(!dim.is_number()) {
+                        throw std::invalid_argument("anchorsV2 JSON anchor dimensions must be numbers");
+                    }
+                    pair.push_back(dim.get<float>());
+                }
+                layer_values.push_back(std::move(pair));
+            }
+            anchors_v2.push_back(std::move(layer_values));
+        }
+        node->setAnchors(anchors_v2);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_anchors_v2_json failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)anchors_json;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_anchors_v2_json");
+#endif
+}
+
+void dai_detection_parser_set_anchor_masks_json(DaiNode parser, const char* anchor_masks_json) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_anchor_masks_json");
+    if(!node) return;
+    if(!anchor_masks_json) {
+        last_error = "dai_detection_parser_set_anchor_masks_json: null anchor_masks_json";
+        return;
+    }
+    try {
+        auto json = nlohmann::json::parse(anchor_masks_json);
+        if(!json.is_object()) {
+            throw std::invalid_argument("anchor masks JSON must be an object");
+        }
+        std::map<std::string, std::vector<int>> masks;
+        for(auto it = json.begin(); it != json.end(); ++it) {
+            if(!it.value().is_array()) {
+                throw std::invalid_argument("anchor masks JSON values must be integer arrays");
+            }
+            std::vector<int> values;
+            values.reserve(it.value().size());
+            for(const auto& value : it.value()) {
+                values.push_back(_dai_json_to_i32(value, "anchor mask value"));
+            }
+            masks.emplace(it.key(), std::move(values));
+        }
+        node->setAnchorMasks(masks);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_anchor_masks_json failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)anchor_masks_json;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_anchor_masks_json");
+#endif
+}
+
+char* dai_detection_parser_get_anchor_masks_json(DaiNode parser) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_get_anchor_masks_json");
+    if(!node) return nullptr;
+    try {
+        return dai_string_to_cstring(nlohmann::json(node->getAnchorMasks()).dump().c_str());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_get_anchor_masks_json failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    (void)parser;
+    _dai_detection_contract_unavailable("dai_detection_parser_get_anchor_masks_json");
+    return nullptr;
+#endif
+}
+
+void dai_detection_parser_set_strides_json(DaiNode parser, const char* strides_json) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_strides_json");
+    if(!node) return;
+    if(!strides_json) {
+        last_error = "dai_detection_parser_set_strides_json: null strides_json";
+        return;
+    }
+    try {
+        auto json = nlohmann::json::parse(strides_json);
+        if(!json.is_array()) {
+            throw std::invalid_argument("strides JSON must be an array");
+        }
+        std::vector<int> strides;
+        strides.reserve(json.size());
+        for(const auto& value : json) {
+            strides.push_back(_dai_json_to_i32(value, "stride value"));
+        }
+        node->setStrides(strides);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_strides_json failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)strides_json;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_strides_json");
+#endif
+}
+
+char* dai_detection_parser_get_strides_json(DaiNode parser) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_get_strides_json");
+    if(!node) return nullptr;
+    try {
+        return dai_string_to_cstring(nlohmann::json(node->getStrides()).dump().c_str());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_get_strides_json failed: ") + e.what();
+        return nullptr;
+    }
+#else
+    (void)parser;
+    _dai_detection_contract_unavailable("dai_detection_parser_get_strides_json");
+    return nullptr;
+#endif
+}
+
+void dai_detection_parser_set_keypoint_edges_json(DaiNode parser, const char* edges_json) {
+#if DEPTHAI_RS_HAS_DETECTION_NETWORK_V3_8
+    auto* node = _dai_as_detection_parser(parser, "dai_detection_parser_set_keypoint_edges_json");
+    if(!node) return;
+    if(!edges_json) {
+        last_error = "dai_detection_parser_set_keypoint_edges_json: null edges_json";
+        return;
+    }
+    try {
+        auto json = nlohmann::json::parse(edges_json);
+        if(!json.is_array()) {
+            throw std::invalid_argument("keypoint edges JSON must be an array");
+        }
+        std::vector<dai::Edge> edges;
+        edges.reserve(json.size());
+        for(const auto& edge : json) {
+            if(!edge.is_array() || edge.size() != 2) {
+                throw std::invalid_argument("each keypoint edge must contain exactly two indices");
+            }
+            uint32_t first = 0;
+            uint32_t second = 0;
+            _dai_json_to_u32(edge[0], &first, "keypoint edge first index");
+            _dai_json_to_u32(edge[1], &second, "keypoint edge second index");
+            edges.push_back({first, second});
+        }
+        node->setKeypointEdges(edges);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_detection_parser_set_keypoint_edges_json failed: ") + e.what();
+    }
+#else
+    (void)parser;
+    (void)edges_json;
+    _dai_detection_contract_unavailable("dai_detection_parser_set_keypoint_edges_json");
+#endif
 }
 
 DaiNNArchive dai_nn_archive_new(const char* path, int compression) {

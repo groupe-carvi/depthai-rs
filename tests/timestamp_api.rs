@@ -46,7 +46,7 @@ fn buffer_system_timestamp_matches_the_selected_depthai_core_surface() {
     let mut buffer = Buffer::new(0).expect("buffer allocation should succeed");
     let timestamp = UNIX_EPOCH + Duration::from_nanos(1_700_000_000_123_456_700);
 
-    if cfg!(feature = "v3-8-0") {
+    if cfg!(depthai_core_ge_3_8) {
         buffer
             .set_timestamp_system(Some(timestamp))
             .expect("system timestamp should be writable with DepthAI-Core v3.8.0");

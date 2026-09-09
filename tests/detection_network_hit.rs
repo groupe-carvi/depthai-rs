@@ -1,4 +1,4 @@
-#![cfg(all(feature = "native", feature = "hit", feature = "v3-8-0"))]
+#![cfg(all(feature = "native", feature = "hit", depthai_core_ge_3_8))]
 
 use std::{
     env,

@@ -787,7 +787,7 @@ mod tests {
         );
     }
 
-    #[cfg(any(feature = "v3-7-1", feature = "v3-8-0"))]
+    #[cfg(depthai_core_ge_3_7)]
     #[test]
     fn nn_data_round_trips_u16_on_core_3_7_and_newer() {
         let mut data = NNData::new().unwrap();

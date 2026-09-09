@@ -734,6 +734,31 @@ DaiDevice dai_device_new_with_device_id(const char* device_id) {
             } catch(...) {}
         }
 
+        // Avoid handing an unknown ID to the native constructor.  On network-connected RVC4
+        // devices, constructing a DeviceInfo for a missing serial can leave XLink discovery in a
+        // stale state; a following default-device open may then block or report the board as in
+        // use even though no handle was created.  Preserve the native "already in use" behavior
+        // for a known board by checking both available and connected inventories first.
+        bool known_device = false;
+        for(const auto& info : dai::DeviceBase::getAllAvailableDevices()) {
+            if(info.deviceId == device_id_str) {
+                known_device = true;
+                break;
+            }
+        }
+        if(!known_device) {
+            for(const auto& info : dai::XLinkConnection::getAllConnectedDevices(
+                    X_LINK_ANY_STATE, /*skipInvalidDevices=*/true)) {
+                if(info.deviceId == device_id_str) {
+                    known_device = true;
+                    break;
+                }
+            }
+        }
+        if(!known_device) {
+            throw std::runtime_error("No device found with device ID " + device_id_str);
+        }
+
         dai::DeviceInfo info(device_id_str);
         auto created = std::make_shared<dai::Device>(info, dai::DeviceBase::DEFAULT_USB_SPEED);
         g_named_devices[device_id_str] = created;

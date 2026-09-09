@@ -67,7 +67,7 @@ static DEPTHAI_CORE_ROOT: Lazy<RwLock<PathBuf>> = Lazy::new(|| {
 const DEPTHAI_CORE_REPOSITORY: &str = "https://github.com/luxonis/depthai-core.git";
 
 // Latest DepthAI-Core version supported by this crate.
-const LATEST_SUPPORTED_DEPTHAI_CORE_TAG: DepthaiCoreVersion = DepthaiCoreVersion::V3_8_0;
+const LATEST_SUPPORTED_DEPTHAI_CORE_TAG: DepthaiCoreVersion = DepthaiCoreVersion::V3_10_0;
 
 /// Windows-only OpenCV prebuilt runtime selection.
 ///
@@ -174,6 +174,8 @@ fn acquire_cache_lock(cache_dir: &Path, label: &str) -> Result<CacheLock, String
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DepthaiCoreVersion {
     Latest,
+    V3_10_0,
+    V3_9_0,
     V3_8_0,
     V3_7_1,
     V3_6_1,
@@ -189,6 +191,8 @@ impl DepthaiCoreVersion {
     fn api_level(self) -> u32 {
         match self {
             DepthaiCoreVersion::Latest => LATEST_SUPPORTED_DEPTHAI_CORE_TAG.api_level(),
+            DepthaiCoreVersion::V3_10_0 => 31_000,
+            DepthaiCoreVersion::V3_9_0 => 30_900,
             DepthaiCoreVersion::V3_8_0 => 30_800,
             DepthaiCoreVersion::V3_7_1 => 30_701,
             DepthaiCoreVersion::V3_6_1 => 30_601,
@@ -204,6 +208,8 @@ impl DepthaiCoreVersion {
     fn tag(self) -> &'static str {
         match self {
             DepthaiCoreVersion::Latest => LATEST_SUPPORTED_DEPTHAI_CORE_TAG.tag(),
+            DepthaiCoreVersion::V3_10_0 => "v3.10.0",
+            DepthaiCoreVersion::V3_9_0 => "v3.9.0",
             DepthaiCoreVersion::V3_8_0 => "v3.8.0",
             DepthaiCoreVersion::V3_7_1 => "v3.7.1",
             DepthaiCoreVersion::V3_6_1 => "v3.6.1",
@@ -227,8 +233,10 @@ impl DepthaiCoreVersion {
             DepthaiCoreVersion::Latest => {
                 LATEST_SUPPORTED_DEPTHAI_CORE_TAG.windows_opencv_runtime()
             }
-            // depthai-core v3.6.1 through v3.8.0 were compiled against OpenCV 4.13.0.
-            DepthaiCoreVersion::V3_8_0
+            // depthai-core v3.6.1 through v3.10.0 were compiled against OpenCV 4.13.0.
+            DepthaiCoreVersion::V3_10_0
+            | DepthaiCoreVersion::V3_9_0
+            | DepthaiCoreVersion::V3_8_0
             | DepthaiCoreVersion::V3_7_1
             | DepthaiCoreVersion::V3_6_1 => WindowsOpenCvRuntime {
                 opencv_version: "4.13.0",
@@ -252,7 +260,9 @@ impl DepthaiCoreVersion {
             DepthaiCoreVersion::Latest => {
                 LATEST_SUPPORTED_DEPTHAI_CORE_TAG.supports_detection_network_v3_8_contract()
             }
-            DepthaiCoreVersion::V3_8_0 => true,
+            DepthaiCoreVersion::V3_10_0
+            | DepthaiCoreVersion::V3_9_0
+            | DepthaiCoreVersion::V3_8_0 => true,
             DepthaiCoreVersion::V3_7_1
             | DepthaiCoreVersion::V3_6_1
             | DepthaiCoreVersion::V3_5_0
@@ -277,6 +287,8 @@ fn selected_depthai_core_version() -> DepthaiCoreVersion {
 
     let candidates: &[(&str, DepthaiCoreVersion)] = &[
         ("CARGO_FEATURE_LATEST", DepthaiCoreVersion::Latest),
+        ("CARGO_FEATURE_V3_10_0", DepthaiCoreVersion::V3_10_0),
+        ("CARGO_FEATURE_V3_9_0", DepthaiCoreVersion::V3_9_0),
         ("CARGO_FEATURE_V3_8_0", DepthaiCoreVersion::V3_8_0),
         ("CARGO_FEATURE_V3_7_1", DepthaiCoreVersion::V3_7_1),
         ("CARGO_FEATURE_V3_6_1", DepthaiCoreVersion::V3_6_1),
@@ -299,7 +311,7 @@ fn selected_depthai_core_version() -> DepthaiCoreVersion {
 
     if picked.len() > 1 {
         panic!(
-            "Multiple DepthAI-Core version features are enabled ({:?}). Please enable at most one of: latest, v3-8-0, v3-7-1, v3-6-1, v3-5-0, v3-4-0, v3-3-0, v3-2-1, v3-2-0, v3-1-0.",
+            "Multiple DepthAI-Core version features are enabled ({:?}). Please enable at most one of: latest, v3-10-0, v3-9-0, v3-8-0, v3-7-1, v3-6-1, v3-5-0, v3-4-0, v3-3-0, v3-2-1, v3-2-0, v3-1-0.",
             enabled
         );
     }

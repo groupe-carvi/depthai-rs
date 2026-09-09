@@ -1,6 +1,7 @@
 //! # depthai-rs
 //!
-//! Experimental Rust bindings + safe-ish wrapper for Luxonis **DepthAI-Core v3.1.0+** (supports v3.1.0, v3.2.0, v3.2.1, v3.3.0, v3.4.0,v3.5.0 and latest).
+//! Experimental Rust bindings + safe-ish wrapper for Luxonis **DepthAI-Core v3.1.0+**
+//! (explicitly supports v3.1.0 through v3.10.0; `latest` selects v3.10.0).
 //!
 //! ## API Overview
 //!

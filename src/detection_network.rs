@@ -5,7 +5,7 @@
 //! output produces [`ImgDetections`], while [`out_network`](DetectionNetworkNode::out_network)
 //! produces raw [`crate::NNData`].
 //!
-//! The DetectionNetwork bindings target DepthAI-Core v3.8.0. Older selected
+//! The DetectionNetwork bindings target the v3.8.0-or-newer contract. Older selected
 //! Core versions return an unsupported-operation error. This API intentionally
 //! excludes `ReplayVideo` builds, `SpatialDetectionNetwork` and
 //! `SpatialImgDetections`, message mutation and image-coordinate transforms,
@@ -17,12 +17,12 @@ use std::{collections::BTreeMap, ffi::CString, path::Path, sync::Arc};
 
 use autocxx::c_int;
 
-use depthai_sys::{depthai, DaiCameraNode, DaiImgDetections};
+use depthai_sys::{DaiCameraNode, DaiImgDetections, depthai};
 
 use crate::{
-    camera::{CameraNode, ImgFrameCapability, ResizeMode},
-    error::{clear_error_flag, last_error, take_error_if_any, DepthaiError, Result},
     Buffer, Input, NNArchive, NNModelDescription, NeuralNetworkNode, Output,
+    camera::{CameraNode, ImgFrameCapability, ResizeMode},
+    error::{DepthaiError, Result, clear_error_flag, last_error, take_error_if_any},
 };
 
 /// An owned DepthAI-Core `ImgDetections` message.

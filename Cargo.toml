@@ -59,6 +59,8 @@ rerun = ["dep:rerun", "dep:tokio", "dep:re_web_viewer_server"]
 # Cargo feature names can't contain dots, so version selectors use `v3-2-1` to mean tag `v3.2.1`.
 # If none are selected, `depthai-sys` uses `latest` (the default).
 latest = ["depthai-sys/latest"]
+v3-10-0 = ["depthai-sys/v3-10-0"]
+v3-9-0 = ["depthai-sys/v3-9-0"]
 v3-8-0 = ["depthai-sys/v3-8-0"]
 v3-7-1 = ["depthai-sys/v3-7-1"]
 v3-6-1 = ["depthai-sys/v3-6-1"]
@@ -139,7 +141,7 @@ required-features = ["rerun"]
 [[example]]
 name = "detection_network_node"
 path = "examples/detection_network_node.rs"
-required-features = ["rerun", "v3-8-0"]
+required-features = ["rerun"]
 
 [dev-dependencies]
 signal-hook = "0.3.18"

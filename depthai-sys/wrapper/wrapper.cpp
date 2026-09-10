@@ -709,9 +709,63 @@ DaiDevice dai_device_new_with_device_id(const char* device_id) {
             return nullptr;
         }
         std::string device_id_str(device_id);
-        std::lock_guard<std::mutex> lock(g_device_mutex);
+        // Reuse an existing connection before performing any discovery calls. Discovery can
+        // synchronously re-enter the C ABI, so it must never run while g_device_mutex is held.
+        {
+            std::lock_guard<std::mutex> lock(g_device_mutex);
 
-        // Reuse existing connection for this device ID if still alive and not closed.
+            // Reuse existing connection for this device ID if still alive and not closed.
+            auto it = g_named_devices.find(device_id_str);
+            if(it != g_named_devices.end()) {
+                if(auto existing = it->second.lock()) {
+                    try {
+                        if(!existing->isClosed()) {
+                            return static_cast<DaiDevice>(new std::shared_ptr<dai::Device>(existing));
+                        }
+                    } catch(...) {}
+                }
+            }
+
+            // Also check the default device: dai_device_new() may have opened this board
+            // before we were called, but it only registered in g_default_device, not here.
+            if(auto existing = g_default_device.lock()) {
+                try {
+                    if(!existing->isClosed() && existing->getDeviceInfo().deviceId == device_id_str) {
+                        g_named_devices[device_id_str] = existing;
+                        return static_cast<DaiDevice>(new std::shared_ptr<dai::Device>(existing));
+                    }
+                } catch(...) {}
+            }
+        }
+
+        // Avoid handing an unknown ID to the native constructor.  On network-connected RVC4
+        // devices, constructing a DeviceInfo for a missing serial can leave XLink discovery in a
+        // stale state; a following default-device open may then block or report the board as in
+        // use even though no handle was created.  Preserve the native "already in use" behavior
+        // for a known board by checking both available and connected inventories first.
+        bool known_device = false;
+        for(const auto& info : dai::DeviceBase::getAllAvailableDevices()) {
+            if(info.deviceId == device_id_str) {
+                known_device = true;
+                break;
+            }
+        }
+        if(!known_device) {
+            for(const auto& info : dai::XLinkConnection::getAllConnectedDevices(
+                    X_LINK_ANY_STATE, /*skipInvalidDevices=*/true)) {
+                if(info.deviceId == device_id_str) {
+                    known_device = true;
+                    break;
+                }
+            }
+        }
+        if(!known_device) {
+            throw std::runtime_error("No device found with device ID " + device_id_str);
+        }
+
+        // Recheck caches after discovery, then construct the selected device while serialized
+        // against other callers. The discovery phase is intentionally outside this lock.
+        std::lock_guard<std::mutex> lock(g_device_mutex);
         auto it = g_named_devices.find(device_id_str);
         if(it != g_named_devices.end()) {
             if(auto existing = it->second.lock()) {
@@ -722,9 +776,6 @@ DaiDevice dai_device_new_with_device_id(const char* device_id) {
                 } catch(...) {}
             }
         }
-
-        // Also check the default device: dai_device_new() may have opened this board
-        // before we were called, but it only registered in g_default_device, not here.
         if(auto existing = g_default_device.lock()) {
             try {
                 if(!existing->isClosed() && existing->getDeviceInfo().deviceId == device_id_str) {

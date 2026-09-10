@@ -7,7 +7,7 @@ depthai-rs is an unofficial binding in rust for the Luxonis's DepthAI-Core C++ l
 
 > [!WARNING]
 > DepthAI-Core itself does not provide strong API stability guarantees yet.
-> This repo targets **DepthAI-Core v3.1.0+** (supported tags: **v3.1.0 to v3.8.0**; default: **`latest` = v3.8.0**).
+> This repo targets **DepthAI-Core v3.1.0+** (supported tags: **v3.1.0 to v3.10.0**; default: **`latest` = v3.10.0**).
 
 ## What’s in this repo
 
@@ -156,7 +156,7 @@ This table reflects what the Rust crates in this repo currently wrap and demonst
 |                             |           |                                                           |
 | `Multi-Device Pipeline`     |    🟡     |                                                           |
 | `Camera`                    |    🟢     | `examples/camera.rs`                                      |
-| `DetectionNetwork`          |    🟢     | Core v3.8.0; `examples/detection_network_node.rs`         |
+| `DetectionNetwork`          |    🟢     | Core v3.8.0+; `examples/detection_network_node.rs`        |
 | `DynamicCalibration`        |    🔴     |                                                           |
 | `Events`                    |    🔴     |                                                           |
 | `FeatureTracker`            |    🔴     |                                                           |

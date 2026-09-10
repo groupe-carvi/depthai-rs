@@ -2890,6 +2890,12 @@ fn emit_link_directives(path: &Path) {
                     println!("cargo:rustc-link-lib=opencv_imgcodecs");
                     println!("cargo:rustc-link-lib=opencv_videoio");
                     println!("cargo:rustc-link-lib=opencv_highgui");
+                    // DepthAI-Core v3.10 enables its beta Stitching sources when
+                    // OpenCV support is available.  Those sources require the
+                    // features2d/flann/stitching modules even though older cores did not.
+                    println!("cargo:rustc-link-lib=opencv_features2d");
+                    println!("cargo:rustc-link-lib=opencv_flann");
+                    println!("cargo:rustc-link-lib=opencv_stitching");
                 } else {
                     // OpenCV (vcpkg names include the major version suffix).
                     static_whole_if_exists("libopencv_core4.a", "opencv_core4");
@@ -2898,6 +2904,12 @@ fn emit_link_directives(path: &Path) {
                     static_whole_if_exists("libopencv_imgcodecs4.a", "opencv_imgcodecs4");
                     static_whole_if_exists("libopencv_videoio4.a", "opencv_videoio4");
                     static_whole_if_exists("libopencv_highgui4.a", "opencv_highgui4");
+                    // DepthAI-Core v3.10 enables its beta Stitching sources when
+                    // OpenCV support is available.  Link the modules required by
+                    // OpenCV's stitching target and its feature matcher dependencies.
+                    static_whole_if_exists("libopencv_features2d4.a", "opencv_features2d4");
+                    static_whole_if_exists("libopencv_flann4.a", "opencv_flann4");
+                    static_whole_if_exists("libopencv_stitching4.a", "opencv_stitching4");
 
                     // OpenCV image codecs can pull in these deps.
                     static_if_exists("libpng16.a", "png16");

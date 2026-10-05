@@ -26,3 +26,5 @@ DepthAI-Core v3.10 exposes per-node owners, but its serialization, transport and
 Run structured discovery with `cargo run --example device_discovery`. Run the two-board qualification with `cargo test --features hit --test multi_device_hit -- --test-threads=1 --nocapture`. Set `DAI_TEST_DEVICE_ID` and `DAI_TEST_DEVICE_ID_2` to select boards; otherwise two distinct available boards are selected. Missing, unavailable or duplicate boards fail qualification. Run other hardware binaries separately to avoid concurrent connection ownership. Record SDK version, OS, descriptor identities, each scenario and frame evidence before marking issue #18 complete.
 
 Compatibility selectors remain available from v3.1.0 through v3.10.0. CI checks v3.1.0, v3.4.0, v3.8.0 and v3.10.0 independently on Windows and Linux; never enable multiple version selectors in one invocation.
+
+Linux binding generation is validated with libclang 18 (`LIBCLANG_PATH=/usr/lib/llvm-18/lib`). Libclang 21 rejects template syntax in upstream libnop headers; the native SDK itself builds with GCC. CI pins the parser without patching the SDK.

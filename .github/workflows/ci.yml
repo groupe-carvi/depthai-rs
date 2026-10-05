@@ -35,7 +35,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            clang libclang-dev \
+            clang-18 libclang-18-dev \
             cmake ninja-build pkg-config \
             python3 \
             autoconf automake autoconf-archive libtool \
@@ -67,6 +67,10 @@ jobs:
           # depthai-sys builds a large native dependency tree; caching helps a lot.
           cache-on-failure: true
           shared-key: ${{ matrix.sdk }}
+
+      - name: Configure Linux clang
+        if: runner.os == 'Linux'
+        run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
 
       - name: Configure Windows clang
         if: runner.os == 'Windows'

@@ -47,6 +47,8 @@ API char *dai_string_to_cstring(const char *str);
 API void dai_free_cstring(char *cstring);
 
 // Opaque handle types
+typedef void *DaiDeviceInfo; // owned immutable dai::DeviceInfo value
+typedef void *DaiDeviceInfoArray; // owned vector of native descriptors
 typedef void *DaiDevice;     // currently: `std::shared_ptr<dai::Device>*`
 typedef void *DaiPipeline;   // currently: `dai::Pipeline*`
 typedef void *DaiNode;       // currently: `dai::Node*` (derived node instance)
@@ -99,17 +101,31 @@ typedef struct DaiPoint3fRGBA {
 
 // Low-level device operations
 API DaiDevice dai_device_new();
-API DaiDevice dai_device_new_with_device_id(const char *device_id);
+// Descriptor constructors copy values and never open a connection.
+API DaiDeviceInfo dai_device_info_new(const char *device_id_or_name);
+API void dai_device_info_delete(DaiDeviceInfo info);
+API char *dai_device_info_get_device_id(DaiDeviceInfo info);
+API char *dai_device_info_get_name(DaiDeviceInfo info);
+API bool dai_device_info_get_metadata(DaiDeviceInfo info, int *state, int *protocol, int *platform, int *status);
+API DaiDeviceInfoArray dai_device_info_array_new(const DaiDeviceInfo *infos, size_t count);
+API size_t dai_device_info_array_len(DaiDeviceInfoArray infos);
+// Returns an owned copy; independent of the array lifetime.
+API DaiDeviceInfo dai_device_info_array_get(DaiDeviceInfoArray infos, size_t index);
+API void dai_device_info_array_delete(DaiDeviceInfoArray infos);
+API DaiDeviceInfoArray dai_device_get_all_available();
+API DaiDeviceInfoArray dai_device_get_all_connected();
+// True means the query succeeded. A null output means no match, without an error.
+API bool dai_device_get_first_available(DaiDeviceInfo *info);
+API bool dai_device_find_by_id(const char *device_id, DaiDeviceInfo *info);
+API DaiDevice dai_device_open(DaiDeviceInfo info);
+API DaiDeviceInfo dai_device_get_info(DaiDevice device);
 API DaiDevice dai_device_clone(DaiDevice device);
 API void dai_device_delete(DaiDevice device);
 API bool dai_device_is_closed(DaiDevice device);
 API void dai_device_close(DaiDevice device);
-// Returns a newline-delimited list of device IDs for all connected boards
-// Returns an empty string (not null) when none are connected
-// Caller must free with dai_free_cstring()
-API char *dai_get_connected_device_ids();
-
 // Low-level pipeline operations
+API DaiNode dai_pipeline_create_node_on(DaiPipeline pipeline, const char *name, DaiDevice device);
+API DaiDevice dai_node_get_device(DaiNode node);
 API DaiPipeline dai_pipeline_new();
 API DaiPipeline dai_pipeline_new_ex(bool create_implicit_device);
 API DaiPipeline dai_pipeline_new_with_device(DaiDevice device);

@@ -49,7 +49,9 @@
 //!
 //! DepthAI device connections are typically exclusive. `depthai-rs` mirrors the common C++ pattern of sharing one device connection:
 //!
-//! - `Device::new()` opens/returns a device handle.
+//! - `Device::all_available()` and `Device::all_connected()` return native descriptor snapshots.
+//! - `Device::first_available()` / `Device::find_by_id()` select descriptors without opening.
+//! - `Device::new()` / `Device::open(&info)` always attempt a new native connection.
 //! - `Device::clone()` / `Device::try_clone()` creates another handle to the same underlying connection.
 //! - `Pipeline::new().with_device(&device).build()?` binds a pipeline to an existing device connection (recommended).
 //! - `Pipeline::start()` starts the pipeline using its associated device connection.
@@ -501,6 +503,7 @@ pub mod camera;
 pub mod common;
 pub mod detection_network;
 pub mod device;
+mod device_info;
 pub mod encoded_frame;
 pub mod error;
 pub mod gate;
@@ -526,7 +529,7 @@ pub use error::{DepthaiError, Result};
 pub use pipeline::{CreateInPipeline, CreateInPipelineWith, DeviceNode, DeviceNodeWithParams};
 
 pub use device::{
-    CameraFeatures, CameraFov, CameraSensorConfig, Device, DevicePlatform, connected_device_ids,
+    CameraFeatures, CameraFov, CameraSensorConfig, Device, DeviceInfo, DevicePlatform,
 };
 pub use pipeline::Pipeline;
 

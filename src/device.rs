@@ -7,6 +7,8 @@ use std::os::raw::c_int as RawInt;
 use crate::common::{CameraBoardSocket, CameraImageOrientation, CameraSensorType};
 use crate::error::{DepthaiError, Result, clear_error_flag, last_error, take_error_if_any};
 
+pub use crate::device_info::DeviceInfo;
+
 const MAX_SOCKETS: usize = 16;
 
 pub struct Device {
@@ -188,6 +190,8 @@ impl Device {
         Self { handle }
     }
 
+    /// Open a new connection to the native first available device.
+    /// Use `clone()` to share an existing connection.
     pub fn new() -> Result<Self> {
         clear_error_flag();
         let handle = depthai::dai_device_new();
@@ -198,23 +202,66 @@ impl Device {
         }
     }
 
-    /// Open the device with the given device ID (serial printed on the board)
-    ///
-    /// Use this when multiple OAK boards are attached and you need to target a specific one.
-    /// The device ID is also visible in `lsusb` as the USB serial attribute
-    ///
-    /// # Errors
-    /// Returns an error if no device with the given ID is found or if it cannot be opened.
-    pub fn new_with_device_id(device_id: &str) -> Result<Self> {
+    /// Enumerate native available devices without opening a connection.
+    pub fn all_available() -> Result<Vec<DeviceInfo>> {
         clear_error_flag();
-        let c_device_id =
-            CString::new(device_id).map_err(|_| last_error("device_id contains a null byte"))?;
-        let handle = unsafe { depthai::dai_device_new_with_device_id(c_device_id.as_ptr()) };
+        DeviceInfo::from_array(depthai::dai_device_get_all_available())
+    }
+    /// Enumerate all native connected devices, including devices already in use.
+    pub fn all_connected() -> Result<Vec<DeviceInfo>> {
+        clear_error_flag();
+        DeviceInfo::from_array(depthai::dai_device_get_all_connected())
+    }
+    /// Select according to native first-available search semantics.
+    pub fn first_available() -> Result<Option<DeviceInfo>> {
+        clear_error_flag();
+        let mut info = std::ptr::null_mut();
+        if !unsafe { depthai::dai_device_get_first_available(&mut info) } {
+            return Err(last_error("failed to discover first available device"));
+        }
+        if info.is_null() {
+            Ok(None)
+        } else {
+            DeviceInfo::from_handle(info).map(Some)
+        }
+    }
+    /// Native ID lookup. Devices in states excluded by `DeviceBase::getDeviceById`
+    /// (including some already-open devices) may be connected but return `None`.
+    pub fn find_by_id(id: &str) -> Result<Option<DeviceInfo>> {
+        if id.is_empty() {
+            return Err(DepthaiError::new("device ID must not be empty"));
+        }
+        let id =
+            CString::new(id).map_err(|_| DepthaiError::new("device ID contains a NUL byte"))?;
+        clear_error_flag();
+        let mut info = std::ptr::null_mut();
+        if !unsafe { depthai::dai_device_find_by_id(id.as_ptr(), &mut info) } {
+            return Err(last_error("failed to discover device by ID"));
+        }
+        if info.is_null() {
+            Ok(None)
+        } else {
+            DeviceInfo::from_handle(info).map(Some)
+        }
+    }
+    /// Open a new native connection from an immutable discovery descriptor.
+    ///
+    /// Independent opens never reuse another handle. Opening an already-open
+    /// board may fail because native connections are exclusive. Clone an existing
+    /// `Device` when connection sharing is intended.
+    pub fn open(info: &DeviceInfo) -> Result<Self> {
+        clear_error_flag();
+        let handle = unsafe { depthai::dai_device_open(info.handle()) };
         if handle.is_null() {
-            Err(last_error("failed to open DepthAI device by device ID"))
+            Err(last_error("failed to open DepthAI device"))
         } else {
             Ok(Self { handle })
         }
+    }
+    /// Snapshot the connected device's native identity and discovery metadata.
+    pub fn info(&self) -> Result<DeviceInfo> {
+        clear_error_flag();
+        DeviceInfo::from_handle(unsafe { depthai::dai_device_get_info(self.handle) })
     }
 
     /// Create another handle to the same underlying device connection.
@@ -358,29 +405,6 @@ mod platform_tests {
         assert_eq!(DevicePlatform::from_raw(-1), None);
         assert_eq!(DevicePlatform::from_raw(3), None);
     }
-}
-
-/// Returns the device IDs of all currently-connected OAK boards.
-///
-/// IDs appear in the same order that [`Device::new`] would pick them, so `ids[0]` is
-/// the board that a default open would target.
-///
-/// # Errors
-/// Returns an error if the XLink enumeration itself fails.
-pub fn connected_device_ids() -> crate::error::Result<Vec<String>> {
-    clear_error_flag();
-    let raw = depthai::dai_get_connected_device_ids();
-    if raw.is_null() {
-        return Err(last_error("failed to query connected device IDs"));
-    }
-    let s = unsafe { CStr::from_ptr(raw) }
-        .to_string_lossy()
-        .into_owned();
-    unsafe { depthai::dai_free_cstring(raw) };
-    if s.is_empty() {
-        return Ok(Vec::new());
-    }
-    Ok(s.split('\n').map(String::from).collect())
 }
 
 #[cfg(test)]

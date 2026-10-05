@@ -10,19 +10,21 @@ Status: implementation candidate; hardware qualification pending. Do not close i
 - Linux validation: Ubuntu under WSL, native x86_64 source build. This is software evidence, not USB/physical hardware evidence.
 - Concurrent owned-string helper work remains on `codex/issue-26-owned-c-strings` / PR #29 in the original checkout. This worktree does not modify that checkout or helper.
 
-## Required software gates
+## Software results
 
-Results will be recorded here after each command completes. Commands select one SDK version feature per invocation.
+- Windows `cargo check --workspace --all-targets --locked`: passed (default SDK v3.10.0).
+- Windows `cargo check --workspace --all-targets --locked --features <selector>`: passed separately for v3.1.0, v3.4.0, v3.8.0 and v3.10.0.
+- Windows `cargo test --workspace --all-targets --locked --features v3-10-0`: passed, 90 tests; hardware features disabled.
+- Windows `cargo test --features hit --no-run --locked`: passed. Final two-board binary compiled with `hit,v3-10-0` after evidence logging was updated.
+- Windows `cargo check --example detection_network_node --features rerun,v3-10-0 --locked`: passed.
+- Windows `cargo doc -p depthai -p depthai-sys --no-deps --locked --features v3-10-0`: passed.
+- Linux/WSL `cargo check --workspace --all-targets --locked`, `cargo test --workspace --all-targets --locked`, and `cargo doc -p depthai -p depthai-sys --no-deps --locked`: passed with upstream SDK v3.10.0 and libclang 18. Native SDK source/dependencies built successfully with GCC. Libclang 21 rejected upstream libnop template syntax; selecting libclang 18 resolved binding generation without an SDK patch. CI pins that parser.
+- Changed Rust files: `rustfmt --check --edition 2024 --config skip_children=true <changed files>` passed. `git diff --check` passed.
+- Hosted Windows/Linux SDK matrix and strict docs.rs jobs: external CI results remain separate from these local results.
 
-- Windows workspace check: passed on v3.10.0. Tests reached the new descriptor suite; a fixture incorrectly assumed the native ID/name constructor selected `name`. Corrected to preserve native field selection; final suite rerun pending.
-- Windows SDK v3.4.0 check: passed. v3.1.0 uncovered existing newer-header/API assumptions; corrected with native capability adapters and explicit unsupported errors. Corrected v3.1.0 C++ syntax check passed; Cargo rerun and v3.8.0/v3.10.0 checks pending.
-- Hardware test compilation (`--features hit --no-run`): passed; final evidence-logging update rerun pending.
-- Detection-network example with `rerun`: pending.
-- Documentation, both crates: pending.
-- Linux workspace check/tests/documentation: pending native dependency build.
-- Changed Rust files formatted; `git diff --check`: passed.
+Earlier failures were repaired: a descriptor fixture assumed native constructor field selection; the corrected fixture preserves SDK ID/name semantics. v3.1.0 exposed newer-header/API assumptions in the existing wrapper; native capability adapters now preserve supported operations and reject unavailable model-format/device-zoo/resize operations. Tensor-size reads handle older non-const accessors, and older datatype inspection uses native serialization.
 
-Baseline findings retained: unrelated repository formatting drift and absent `examples/video_encoder_rerun_h265.rs` prevent a clean whole-workspace formatting check. The missing example requires the optional rerun feature and is outside issue #18's scope.
+Baseline findings retained: unrelated repository formatting drift and absent `examples/video_encoder_rerun_h265.rs` prevent a clean whole-workspace formatting check (confirmed exit 1). The missing optional example remains outside issue #18's scope.
 
 ## Required two-board scenarios
 
@@ -30,10 +32,18 @@ Run `cargo test --features hit --test multi_device_hit -- --test-threads=1 --noc
 
 The test logs SDK, OS, board descriptors, bounded frames and native reopening result. Required scenarios: independent identity/opening; clone/drop/close propagation; retained pipeline/default-device owners; bounded frames from two separate pipelines; default opening while another board is occupied; selected camera/socket and group-child owners; build/start/run rejection of a cross-connection graph before native processing; explicit host-node rejection; independent reopening without constructor deduplication; closed-owner graph rejection.
 
-Initial Windows/v3.10.0 hardware attempt failed before opening: no second distinct available board, with discovery selecting ID `236225297` and no explicit ID environment selections. Native warning: `USB protocol not available`. Test exit 101, zero passed/one failed. Board identities and metadata will be logged before selection on the final rerun.
+Final Windows/v3.10.0 two-board command: `cargo test --features hit,v3-10-0 --test multi_device_hit --locked -- --test-threads=1 --nocapture`. Exit 101; zero passed, one failed. No explicit device ID environment selections were supplied.
 
-Board A: not qualified. Board B: not qualified. Ownership/streaming scenarios were not executed. No physical or streaming success is inferred from software compilation.
+Native available inventory (also confirmed by the successful structured-discovery example):
+
+| Device ID | Native name | State | Protocol | Platform | Status |
+| --- | --- | --- | --- | --- | --- |
+| 236225297 | 192.168.50.165 | 5 | 4 | 4000 | 0 |
+
+Connected inventory and first-available selection returned the same descriptor. The SDK warned `USB protocol not available`. Qualification failed before opening because no second distinct available board existed. Final diagnostic: `two available boards are required; requested=None, excluded=Some("236225297")`.
+
+Board A: not qualified. Board B: not qualified. Opening, clone/drop/close, camera streaming, explicit group placement and graph-execution rejection scenarios were not executed on physical boards. No physical or streaming success is inferred from software compilation.
 
 ## Delivery and closure
 
-Open a draft PR with `Refs #18`. After all software gates and two physical boards pass, attach the actual scenario log and board identities, add `Closes #18`, and mark the PR ready. Merging then closes the issue.
+Draft PR: https://github.com/groupe-carvi/depthai-rs/pull/30, using `Refs #18`. Concurrent branch cleanup closed it and renamed the local branch; the plan-specified `codex/native-device-ownership` branch and draft PR were restored, preserving the renamed `feat/native-device-ownership` branch. After all software gates and two physical boards pass, attach the actual scenario log and board identities, add `Closes #18`, and mark the PR ready. Merging then closes the issue.

@@ -28,6 +28,8 @@ Baseline findings retained: unrelated repository formatting drift and absent `ex
 
 All four SDK checks, Windows/Linux workspace tests, both-crate documentation builds, the detection example and hardware-test compilation were rerun successfully after the main merge. Workflow lint also passed.
 
+Windows runtime staging: sequential SDK checks in a shared Cargo target directory can leave an older SDK's DLLs in the test search path, causing `STATUS_ENTRYPOINT_NOT_FOUND`. Restaging the upstream v3.10.0 DLLs into the Cargo runtime directories restored execution; the final workspace suite passed and the hardware test reached native discovery. Use separate target directories for SDK versions when running runtime tests. CI isolates each version in its own matrix job.
+
 ## Required two-board scenarios
 
 Run `cargo test --features hit --test multi_device_hit -- --test-threads=1 --nocapture` separately from other hardware binaries. The test never skips missing hardware. Explicit IDs are selected with `DAI_TEST_DEVICE_ID` and `DAI_TEST_DEVICE_ID_2`; absent IDs select distinct native available descriptors. Duplicate, missing or unavailable selections block qualification.

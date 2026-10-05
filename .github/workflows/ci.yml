@@ -13,10 +13,11 @@ concurrency:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
 
     env:
+      DEPTHAI_RS_CACHE_DIR: ${{ github.workspace }}/.depthai-cache
       VCPKG_DOWNLOADS: ${{ github.workspace }}/.vcpkg-cache/downloads
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache/archives
 
@@ -39,6 +40,31 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Fingerprint native toolchain
+        id: native-toolchain
+        shell: bash
+        run: |
+          fingerprint=$(
+            {
+              cat /etc/os-release
+              gcc --version
+              g++ --version
+              clang --version
+              cmake --version
+              ninja --version
+              dpkg-query -W libc6-dev libudev-dev libssl-dev libdw-dev libelf-dev
+            } | sha256sum | cut -d ' ' -f 1
+          )
+          echo "fingerprint=${fingerprint}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache compiled DepthAI-Core
+        uses: actions/cache@v4
+        with:
+          # Keep headers, generated files and transitive libraries with the core library.
+          # Exact matches only: build.rs reuses native libraries without rebuilding them.
+          path: ${{ env.DEPTHAI_RS_CACHE_DIR }}
+          key: depthai-core-v1-ubuntu-24.04-${{ runner.arch }}-${{ steps.native-toolchain.outputs.fingerprint }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'depthai-sys/Cargo.toml', 'depthai-sys/build.rs', 'depthai-sys/src/cache_layout.rs', '.github/workflows/ci.yml') }}
+
       - name: Prepare vcpkg cache directories
         run: |
           mkdir -p "${VCPKG_DOWNLOADS}" "${VCPKG_DEFAULT_BINARY_CACHE}"
@@ -56,7 +82,7 @@ jobs:
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
-          # depthai-sys builds a large native dependency tree; caching helps a lot.
+          # Native outputs outside target/ are cached separately above.
           cache-on-failure: true
 
       - name: Build (workspace)

@@ -4,9 +4,10 @@
 //! tensor names, preprocessing, postprocessing, and product policy belong in
 //! downstream applications.
 
+use crate::ffi_string::take_dai_owned_string_lossy;
 use autocxx::c_int;
 use std::collections::BTreeMap;
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::path::Path;
 use std::ptr;
 
@@ -382,11 +383,7 @@ fn parse_owned_json<T>(json: *mut std::ffi::c_char, context: &str) -> Result<T>
 where
     T: serde::de::DeserializeOwned,
 {
-    if json.is_null() {
-        return Err(last_error(context));
-    }
-    let json_text = unsafe { CStr::from_ptr(json).to_string_lossy().into_owned() };
-    unsafe { depthai::dai_free_cstring(json) };
+    let json_text = unsafe { take_dai_owned_string_lossy(json, context) }?;
     if let Some(error) = take_error_if_any(context) {
         return Err(error);
     }
@@ -741,6 +738,8 @@ mod tests {
     #[test]
     fn nn_data_round_trips_tensor_metadata_bytes_and_batch() {
         let mut data = NNData::new().unwrap();
+        assert!(data.tensor_info("missing").unwrap().is_none());
+        assert!(data.all_tensor_info().unwrap().is_empty());
         let bytes = (0_u8..24).collect::<Vec<_>>();
         let spec = TensorSpec {
             data_type: TensorDataType::U8,
@@ -754,6 +753,7 @@ mod tests {
         };
 
         data.add_tensor("input", &bytes, &spec).unwrap();
+        assert!(data.tensor_info("missing").unwrap().is_none());
         data.set_batch_size(2).unwrap();
 
         let info = data.tensor_info("input").unwrap().unwrap();

@@ -1,3 +1,4 @@
+use crate::ffi_string::take_dai_owned_string_lossy;
 use std::ffi::CString;
 use std::sync::Arc;
 
@@ -40,15 +41,6 @@ impl Node {
         self.handle
     }
 
-    fn take_owned_string(ptr: *mut std::ffi::c_char, context: &str) -> Result<String> {
-        if ptr.is_null() {
-            return Err(last_error(context));
-        }
-        let s = unsafe { std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned() };
-        unsafe { depthai::dai_free_cstring(ptr) };
-        Ok(s)
-    }
-
     /// Returns the node id assigned by the pipeline.
     pub fn id(&self) -> Result<i32> {
         clear_error_flag();
@@ -64,7 +56,7 @@ impl Node {
     pub fn alias(&self) -> Result<String> {
         clear_error_flag();
         let ptr = unsafe { depthai::dai_node_get_alias(self.handle) };
-        Self::take_owned_string(ptr, "failed to get node alias")
+        unsafe { take_dai_owned_string_lossy(ptr, "failed to get node alias") }
     }
 
     /// Sets the node alias (user-defined label).
@@ -83,7 +75,7 @@ impl Node {
     pub fn name(&self) -> Result<String> {
         clear_error_flag();
         let ptr = unsafe { depthai::dai_node_get_name(self.handle) };
-        Self::take_owned_string(ptr, "failed to get node name")
+        unsafe { take_dai_owned_string_lossy(ptr, "failed to get node name") }
     }
 
     pub fn link(

@@ -1,8 +1,9 @@
 //! Immutable native device descriptors; cloning metadata never opens a device.
 use crate::error::{Result, last_error, take_error_if_any};
+use crate::ffi_string::take_dai_owned_string_lossy;
 use autocxx::c_int;
 use depthai_sys::{DaiDeviceInfo, DaiDeviceInfoArray, depthai};
-use std::{ffi::CStr, sync::Arc};
+use std::sync::Arc;
 
 struct NativeInfo(DaiDeviceInfo);
 // Native descriptors are immutable after construction. Getter calls only read
@@ -77,8 +78,18 @@ impl DeviceInfo {
             return Err(last_error("failed to obtain native device info"));
         }
         let native = NativeInfo(handle);
-        let device_id = take_string(unsafe { depthai::dai_device_info_get_device_id(handle) })?;
-        let name = take_string(unsafe { depthai::dai_device_info_get_name(handle) })?;
+        let device_id = unsafe {
+            take_dai_owned_string_lossy(
+                depthai::dai_device_info_get_device_id(handle),
+                "failed to read native device ID",
+            )
+        }?;
+        let name = unsafe {
+            take_dai_owned_string_lossy(
+                depthai::dai_device_info_get_name(handle),
+                "failed to read native device name",
+            )
+        }?;
         let (mut state, mut protocol, mut platform, mut status) =
             (c_int(0), c_int(0), c_int(0), c_int(0));
         let ok = unsafe {
@@ -138,22 +149,6 @@ impl Drop for InfoArray {
         tests::record_array_drop();
     }
 }
-fn take_string(ptr: *mut std::ffi::c_char) -> Result<String> {
-    if ptr.is_null() {
-        return Err(last_error("failed to read device descriptor string"));
-    }
-    struct OwnedString(*mut std::ffi::c_char);
-    impl Drop for OwnedString {
-        fn drop(&mut self) {
-            unsafe { depthai::dai_free_cstring(self.0) };
-        }
-    }
-    let owned = OwnedString(ptr);
-    Ok(unsafe { CStr::from_ptr(owned.0) }
-        .to_string_lossy()
-        .into_owned())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

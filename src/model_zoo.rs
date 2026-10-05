@@ -1,3 +1,4 @@
+use crate::ffi_string::take_dai_owned_string_lossy;
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -104,7 +105,9 @@ impl NNModelDescription {
         let ptr = unsafe {
             depthai::dai_nn_model_description_from_yaml_file_json(name_c.as_ptr(), path_c.as_ptr())
         };
-        let json = take_owned_string(ptr, "from_yaml_file: failed to load model description")?;
+        let json = unsafe {
+            take_dai_owned_string_lossy(ptr, "from_yaml_file: failed to load model description")
+        }?;
         serde_json::from_str::<Self>(&json).map_err(|e| {
             DepthaiError::new(format!(
                 "from_yaml_file: invalid JSON from depthai-core: {e}"
@@ -129,7 +132,9 @@ impl NNModelDescription {
                 models_path_c.as_ptr(),
             )
         };
-        let json = take_owned_string(ptr, "from_yaml_file: failed to load model description")?;
+        let json = unsafe {
+            take_dai_owned_string_lossy(ptr, "from_yaml_file: failed to load model description")
+        }?;
         serde_json::from_str::<Self>(&json).map_err(|e| {
             DepthaiError::new(format!(
                 "from_yaml_file: invalid JSON from depthai-core: {e}"
@@ -293,7 +298,7 @@ pub fn get_model_from_zoo(desc: &NNModelDescription, opts: &ZooFetchOptions) -> 
             progress_c.as_ptr(),
         )
     };
-    let path_str = take_owned_string(ptr, "failed to get model from zoo")?;
+    let path_str = unsafe { take_dai_owned_string_lossy(ptr, "failed to get model from zoo") }?;
     Ok(PathBuf::from(path_str))
 }
 
@@ -368,7 +373,7 @@ pub fn set_health_endpoint(endpoint: &str) -> Result<()> {
 pub fn get_health_endpoint() -> Result<String> {
     clear_error_flag();
     let ptr = unsafe { depthai::dai_modelzoo_get_health_endpoint() };
-    take_owned_string(ptr, "failed to get health endpoint")
+    unsafe { take_dai_owned_string_lossy(ptr, "failed to get health endpoint") }
 }
 
 /// Set the model-zoo download endpoint URL.
@@ -397,7 +402,7 @@ pub fn set_download_endpoint(endpoint: &str) -> Result<()> {
 pub fn get_download_endpoint() -> Result<String> {
     clear_error_flag();
     let ptr = unsafe { depthai::dai_modelzoo_get_download_endpoint() };
-    take_owned_string(ptr, "failed to get download endpoint")
+    unsafe { take_dai_owned_string_lossy(ptr, "failed to get download endpoint") }
 }
 
 /// Set the default cache path used when fetching models from the zoo.
@@ -432,7 +437,7 @@ pub fn set_default_cache_path(path: impl AsRef<Path>) -> Result<()> {
 pub fn get_default_cache_path() -> Result<PathBuf> {
     clear_error_flag();
     let ptr = unsafe { depthai::dai_modelzoo_get_default_cache_path() };
-    let s = take_owned_string(ptr, "failed to get default cache path")?;
+    let s = unsafe { take_dai_owned_string_lossy(ptr, "failed to get default cache path") }?;
     Ok(PathBuf::from(s))
 }
 
@@ -468,17 +473,8 @@ pub fn set_default_models_path(path: impl AsRef<Path>) -> Result<()> {
 pub fn get_default_models_path() -> Result<PathBuf> {
     clear_error_flag();
     let ptr = unsafe { depthai::dai_modelzoo_get_default_models_path() };
-    let s = take_owned_string(ptr, "failed to get default models path")?;
+    let s = unsafe { take_dai_owned_string_lossy(ptr, "failed to get default models path") }?;
     Ok(PathBuf::from(s))
-}
-
-fn take_owned_string(ptr: *mut std::ffi::c_char, context: &str) -> Result<String> {
-    if ptr.is_null() {
-        return Err(last_error(context));
-    }
-    let s = unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() };
-    unsafe { depthai::dai_free_cstring(ptr) };
-    Ok(s)
 }
 
 #[cfg(test)]

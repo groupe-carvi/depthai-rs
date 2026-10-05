@@ -506,6 +506,7 @@ pub mod device;
 mod device_info;
 pub mod encoded_frame;
 pub mod error;
+mod ffi_string;
 pub mod gate;
 pub mod host_node;
 pub mod image_align;

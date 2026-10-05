@@ -6,6 +6,9 @@ use depthai::{DetectionParserNode, Pipeline, Result};
 fn detection_parser_configuration_interactions_without_hardware() -> Result<()> {
     let pipeline = Pipeline::new_host_only()?;
     let parser = pipeline.create::<DetectionParserNode>()?;
+    assert_eq!(parser.classes()?, None);
+    parser.set_classes(&[])?;
+    assert_eq!(parser.classes()?, Some(vec![]));
     let class_names = vec![
         "task-14-review-alpha".to_owned(),
         "task-14-review-beta".to_owned(),

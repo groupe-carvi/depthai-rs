@@ -13,8 +13,14 @@ concurrency:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
+    name: ${{ matrix.os }} / DepthAI-Core ${{ matrix.sdk }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        sdk: [v3-1-0, v3-4-0, v3-8-0, v3-10-0]
 
     env:
       VCPKG_DOWNLOADS: ${{ github.workspace }}/.vcpkg-cache/downloads
@@ -25,6 +31,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -40,6 +47,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Prepare vcpkg cache directories
+        shell: bash
         run: |
           mkdir -p "${VCPKG_DOWNLOADS}" "${VCPKG_DEFAULT_BINARY_CACHE}"
 
@@ -58,16 +66,28 @@ jobs:
         with:
           # depthai-sys builds a large native dependency tree; caching helps a lot.
           cache-on-failure: true
+          shared-key: ${{ matrix.sdk }}
+
+      - name: Configure Windows clang
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: '"LIBCLANG_PATH=C:/Program Files/LLVM/bin" | Out-File -FilePath $env:GITHUB_ENV -Append'
 
       - name: Build (workspace)
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: 80
           max_attempts: 2
-          command: cargo build --workspace --all-targets --locked
+          command: cargo check --workspace --all-targets --locked --features ${{ matrix.sdk }}
 
       - name: Test (workspace)
-        run: cargo test --workspace --all-targets --locked
+        run: cargo test --workspace --all-targets --locked --features ${{ matrix.sdk }}
+
+      - name: Compile hardware qualification tests (no hardware on CI)
+        run: cargo test --features hit,${{ matrix.sdk }} --no-run --locked
+
+      - name: Build documentation for both crates
+        run: cargo doc -p depthai -p depthai-sys --no-deps --locked --features ${{ matrix.sdk }}
 
   doc:
     name: Documentation (docs.rs)

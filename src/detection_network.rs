@@ -15,6 +15,7 @@
 
 use std::{collections::BTreeMap, ffi::CString, path::Path, sync::Arc};
 
+use crate::ffi_string::take_dai_owned_string_lossy;
 use autocxx::c_int;
 
 use depthai_sys::{DaiCameraNode, DaiImgDetections, depthai};
@@ -68,16 +69,8 @@ impl ImgDetections {
     pub fn detections(&self) -> Result<Vec<ImgDetection>> {
         clear_error_flag();
         let json = unsafe { depthai::dai_img_detections_get_detections_json(self.handle) };
-        if json.is_null() {
-            return Err(last_error("failed to get detections json"));
-        };
-
-        let json_str = unsafe {
-            std::ffi::CStr::from_ptr(json)
-                .to_string_lossy()
-                .into_owned()
-        };
-        unsafe { depthai::dai_free_cstring(json) };
+        let json_str =
+            unsafe { take_dai_owned_string_lossy(json, "failed to get detections json") }?;
 
         if let Some(err) = take_error_if_any("failed to get detections") {
             return Err(err);
@@ -658,7 +651,11 @@ impl DetectionParserNode {
 
         let subtype = unsafe { depthai::dai_detection_parser_get_subtype(self.node.handle()) };
 
-        take_owned_string(subtype, "failed to get DetectionParser subtype")
+        let subtype = unsafe {
+            take_dai_owned_string_lossy(subtype, "failed to get DetectionParser subtype")
+        }?;
+        check_void_result("failed to get DetectionParser subtype")?;
+        Ok(subtype)
     }
 
     /// Enables or disables keypoint decoding.
@@ -1357,15 +1354,9 @@ impl DetectionNetworkNode {
     pub fn classes(&self) -> Result<Option<Vec<String>>> {
         clear_error_flag();
         let json_c = unsafe { depthai::dai_detection_network_get_classes_json(self.node.handle()) };
-        if json_c.is_null() {
-            return Err(last_error("failed to get classes from DetectionNetwork"));
-        }
         let json_str = unsafe {
-            std::ffi::CStr::from_ptr(json_c)
-                .to_string_lossy()
-                .into_owned()
-        };
-        unsafe { depthai::dai_free_cstring(json_c) };
+            take_dai_owned_string_lossy(json_c, "failed to get classes from DetectionNetwork")
+        }?;
 
         if let Some(err) = take_error_if_any("failed to get classes from DetectionNetwork") {
             return Err(err);
@@ -1404,39 +1395,13 @@ fn parse_owned_json<T>(json: *mut std::ffi::c_char, context: &str) -> Result<T>
 where
     T: serde::de::DeserializeOwned,
 {
-    if json.is_null() {
-        return Err(last_error(context));
-    }
-
-    let text = unsafe { std::ffi::CStr::from_ptr(json) }
-        .to_string_lossy()
-        .into_owned();
-
-    unsafe { depthai::dai_free_cstring(json) };
+    let text = unsafe { take_dai_owned_string_lossy(json, context) }?;
 
     if let Some(error) = take_error_if_any(context) {
         return Err(error);
     }
 
     serde_json::from_str(&text).map_err(|error| DepthaiError::new(format!("{context}: {error}")))
-}
-
-fn take_owned_string(value: *mut std::ffi::c_char, context: &str) -> Result<String> {
-    if value.is_null() {
-        return Err(last_error(context));
-    }
-
-    let text = unsafe { std::ffi::CStr::from_ptr(value) }
-        .to_string_lossy()
-        .into_owned();
-
-    unsafe { depthai::dai_free_cstring(value) };
-
-    if let Some(error) = take_error_if_any(context) {
-        return Err(error);
-    }
-
-    Ok(text)
 }
 
 #[cfg(test)]

@@ -1,3 +1,4 @@
+use crate::ffi_string::take_dai_owned_string_lossy;
 use std::ffi::{CStr, CString, c_char, c_void as std_c_void};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex};
@@ -340,19 +341,10 @@ impl MessageQueue {
         self.inner.handle
     }
 
-    fn take_owned_string(ptr: *mut c_char, context: &str) -> Result<String> {
-        if ptr.is_null() {
-            return Err(last_error(context));
-        }
-        let s = unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() };
-        unsafe { depthai::dai_free_cstring(ptr) };
-        Ok(s)
-    }
-
     pub fn name(&self) -> Result<String> {
         clear_error_flag();
         let ptr = unsafe { depthai::dai_queue_get_name(self.handle()) };
-        let name = Self::take_owned_string(ptr, "failed to get queue name")?;
+        let name = unsafe { take_dai_owned_string_lossy(ptr, "failed to get queue name") }?;
         if let Some(err) = take_error_if_any("failed to get queue name") {
             Err(err)
         } else {
@@ -643,6 +635,7 @@ unsafe extern "C" fn queue_callback_trampoline(
     let name = if queue_name.is_null() {
         "".to_string()
     } else {
+        // Borrowed for the callback duration; copy it without freeing native memory.
         unsafe { CStr::from_ptr(queue_name).to_string_lossy().into_owned() }
     };
 

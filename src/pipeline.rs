@@ -1,3 +1,4 @@
+use crate::ffi_string::take_dai_owned_string_lossy;
 pub mod device_node;
 pub mod node;
 
@@ -9,7 +10,7 @@ pub use node::Node;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::{
-    ffi::{CStr, CString},
+    ffi::CString,
     path::{Path, PathBuf},
 };
 
@@ -72,15 +73,6 @@ pub struct PipelineConnectionInfo {
     pub input_group: String,
     #[serde(rename = "inputName")]
     pub input_name: String,
-}
-
-fn take_owned_json_string(ptr: *mut std::ffi::c_char, context: &str) -> Result<String> {
-    if ptr.is_null() {
-        return Err(last_error(context));
-    }
-    let s = unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() };
-    unsafe { depthai::dai_free_cstring(ptr) };
-    Ok(s)
 }
 
 fn parse_json_value(s: &str) -> Result<serde_json::Value> {
@@ -607,7 +599,8 @@ impl Pipeline {
     pub fn serialize_to_json(&self, include_assets: bool) -> Result<serde_json::Value> {
         clear_error_flag();
         let ptr = unsafe { depthai::dai_pipeline_serialize_to_json(self.inner.handle, include_assets) };
-        let s = take_owned_json_string(ptr, "failed to serialize pipeline to json")?;
+        let s =
+            unsafe { take_dai_owned_string_lossy(ptr, "failed to serialize pipeline to json") }?;
         parse_json_value(&s)
     }
 
@@ -617,7 +610,7 @@ impl Pipeline {
         let ptr = unsafe {
             depthai::dai_pipeline_get_schema_json(self.inner.handle, c_int(serialization_type as i32))
         };
-        let s = take_owned_json_string(ptr, "failed to get pipeline schema json")?;
+        let s = unsafe { take_dai_owned_string_lossy(ptr, "failed to get pipeline schema json") }?;
         parse_json_value(&s)
     }
 
@@ -627,7 +620,7 @@ impl Pipeline {
     pub fn all_nodes(&self) -> Result<Vec<PipelineNodeInfo>> {
         clear_error_flag();
         let ptr = unsafe { depthai::dai_pipeline_get_all_nodes_json(self.inner.handle) };
-        let s = take_owned_json_string(ptr, "failed to get pipeline nodes")?;
+        let s = unsafe { take_dai_owned_string_lossy(ptr, "failed to get pipeline nodes") }?;
         let v = parse_json_value(&s)?;
         serde_json::from_value(v)
             .map_err(|e| DepthaiError::new(format!("invalid nodes JSON from depthai-core: {e}")))
@@ -639,7 +632,7 @@ impl Pipeline {
     pub fn source_nodes(&self) -> Result<Vec<PipelineNodeInfo>> {
         clear_error_flag();
         let ptr = unsafe { depthai::dai_pipeline_get_source_nodes_json(self.inner.handle) };
-        let s = take_owned_json_string(ptr, "failed to get pipeline source nodes")?;
+        let s = unsafe { take_dai_owned_string_lossy(ptr, "failed to get pipeline source nodes") }?;
         let v = parse_json_value(&s)?;
         serde_json::from_value(v)
             .map_err(|e| DepthaiError::new(format!("invalid source nodes JSON from depthai-core: {e}")))
@@ -681,7 +674,7 @@ impl Pipeline {
     pub fn connections(&self) -> Result<Vec<PipelineConnectionInfo>> {
         clear_error_flag();
         let ptr = unsafe { depthai::dai_pipeline_get_connections_json(self.inner.handle) };
-        let s = take_owned_json_string(ptr, "failed to get pipeline connections")?;
+        let s = unsafe { take_dai_owned_string_lossy(ptr, "failed to get pipeline connections") }?;
         let v = parse_json_value(&s)?;
         serde_json::from_value(v).map_err(|e| {
             DepthaiError::new(format!("invalid connections JSON from depthai-core: {e}"))
@@ -694,7 +687,8 @@ impl Pipeline {
     pub fn connection_map(&self) -> Result<HashMap<i32, Vec<PipelineConnectionInfo>>> {
         clear_error_flag();
         let ptr = unsafe { depthai::dai_pipeline_get_connection_map_json(self.inner.handle) };
-        let s = take_owned_json_string(ptr, "failed to get pipeline connection map")?;
+        let s =
+            unsafe { take_dai_owned_string_lossy(ptr, "failed to get pipeline connection map") }?;
         let v = parse_json_value(&s)?;
         let raw: HashMap<String, Vec<PipelineConnectionInfo>> = serde_json::from_value(v)
             .map_err(|e| DepthaiError::new(format!("invalid connection map JSON from depthai-core: {e}")))?;
@@ -727,7 +721,8 @@ impl Pipeline {
     pub fn calibration_data_json(&self) -> Result<Option<serde_json::Value>> {
         clear_error_flag();
         let ptr = unsafe { depthai::dai_pipeline_get_calibration_data_json(self.inner.handle) };
-        let s = take_owned_json_string(ptr, "failed to get pipeline calibration data")?;
+        let s =
+            unsafe { take_dai_owned_string_lossy(ptr, "failed to get pipeline calibration data") }?;
         let v = parse_json_value(&s)?;
         if v.is_null() {
             Ok(None)
@@ -759,7 +754,7 @@ impl Pipeline {
     pub fn global_properties_json(&self) -> Result<serde_json::Value> {
         clear_error_flag();
         let ptr = unsafe { depthai::dai_pipeline_get_global_properties_json(self.inner.handle) };
-        let s = take_owned_json_string(ptr, "failed to get global properties")?;
+        let s = unsafe { take_dai_owned_string_lossy(ptr, "failed to get global properties") }?;
         parse_json_value(&s)
     }
 
@@ -783,7 +778,7 @@ impl Pipeline {
     pub fn board_config_json(&self) -> Result<serde_json::Value> {
         clear_error_flag();
         let ptr = unsafe { depthai::dai_pipeline_get_board_config_json(self.inner.handle) };
-        let s = take_owned_json_string(ptr, "failed to get board config")?;
+        let s = unsafe { take_dai_owned_string_lossy(ptr, "failed to get board config") }?;
         parse_json_value(&s)
     }
 
@@ -805,7 +800,7 @@ impl Pipeline {
     pub fn device_config_json(&self) -> Result<serde_json::Value> {
         clear_error_flag();
         let ptr = unsafe { depthai::dai_pipeline_get_device_config_json(self.inner.handle) };
-        let s = take_owned_json_string(ptr, "failed to get device config")?;
+        let s = unsafe { take_dai_owned_string_lossy(ptr, "failed to get device config") }?;
         parse_json_value(&s)
     }
 
@@ -815,7 +810,7 @@ impl Pipeline {
     pub fn eeprom_data_json(&self) -> Result<serde_json::Value> {
         clear_error_flag();
         let ptr = unsafe { depthai::dai_pipeline_get_eeprom_data_json(self.inner.handle) };
-        let s = take_owned_json_string(ptr, "failed to get EEPROM data")?;
+        let s = unsafe { take_dai_owned_string_lossy(ptr, "failed to get EEPROM data") }?;
         parse_json_value(&s)
     }
 

@@ -1,7 +1,8 @@
+use crate::ffi_string::take_dai_owned_string_lossy;
 use autocxx::c_int;
 use depthai_sys::{DaiDevice, depthai};
 use serde::Deserialize;
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::os::raw::c_int as RawInt;
 
 use crate::common::{CameraBoardSocket, CameraImageOrientation, CameraSensorType};
@@ -290,13 +291,9 @@ impl Device {
     pub fn connected_camera_features(&self) -> Result<Vec<CameraFeatures>> {
         clear_error_flag();
         let raw = unsafe { depthai::dai_device_get_connected_camera_features_json(self.handle) };
-        if raw.is_null() {
-            return Err(last_error("failed to query connected camera features"));
-        }
-        let json = unsafe { CStr::from_ptr(raw) }
-            .to_string_lossy()
-            .into_owned();
-        unsafe { depthai::dai_free_cstring(raw) };
+        let json = unsafe {
+            take_dai_owned_string_lossy(raw, "failed to query connected camera features")
+        }?;
         parse_camera_features_json(&json)
     }
 
@@ -370,13 +367,7 @@ mod platform_tests {
 pub fn connected_device_ids() -> crate::error::Result<Vec<String>> {
     clear_error_flag();
     let raw = depthai::dai_get_connected_device_ids();
-    if raw.is_null() {
-        return Err(last_error("failed to query connected device IDs"));
-    }
-    let s = unsafe { CStr::from_ptr(raw) }
-        .to_string_lossy()
-        .into_owned();
-    unsafe { depthai::dai_free_cstring(raw) };
+    let s = unsafe { take_dai_owned_string_lossy(raw, "failed to query connected device IDs") }?;
     if s.is_empty() {
         return Ok(Vec::new());
     }

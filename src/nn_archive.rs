@@ -1,7 +1,5 @@
-use std::{
-    ffi::{CStr, CString},
-    path::Path,
-};
+use crate::ffi_string::take_dai_owned_string_lossy;
+use std::{ffi::CString, path::Path};
 
 use autocxx::c_int;
 
@@ -204,18 +202,11 @@ impl NNArchive {
 
     pub fn supported_platforms(&self) -> Result<Vec<DevicePlatform>> {
         clear_error_flag();
-        // NOTE:(mathieu) C char* to Rust string pattern is used in multiple modules.
-        // The creation of an helper module to centralize this functionnality may be worthwhile.
         let char_ptr: *mut std::ffi::c_char =
             unsafe { depthai::dai_nn_archive_get_supported_platforms_json(self.handle) };
 
-        if char_ptr.is_null() {
-            return Err(last_error("failed to get supported platforms"));
-        }
-
-        let owned_json = unsafe { CStr::from_ptr(char_ptr).to_string_lossy().into_owned() };
-
-        unsafe { depthai::dai_free_cstring(char_ptr) };
+        let owned_json =
+            unsafe { take_dai_owned_string_lossy(char_ptr, "failed to get supported platforms") }?;
 
         if let Some(err) = take_error_if_any("failed to get supported platforms") {
             return Err(err);

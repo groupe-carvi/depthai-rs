@@ -49,6 +49,7 @@ fn take_error_message() -> Option<String> {
         if err_ptr.is_null() {
             return None;
         }
+        // Borrowed from native thread-local storage; copy before clearing, never free.
         let msg = CStr::from_ptr(err_ptr).to_string_lossy().into_owned();
         depthai::dai_clear_last_error();
         Some(msg)

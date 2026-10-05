@@ -7,6 +7,8 @@ use depthai::{ThreadedHostNodeContext, ThreadedHostNodeImpl};
 fn pipeline_schema_and_json_serialize_without_hardware() -> depthai::Result<()> {
     // Host-only pipeline: should not attempt to discover/connect to a DepthAI device.
     let pipeline = Pipeline::new_host_only()?;
+    // An allocated JSON `null` is absence, not an FFI failure.
+    assert!(pipeline.calibration_data_json()?.is_none());
 
     // Schema JSON should be valid JSON.
     let schema = pipeline.schema_json(SerializationType::Json)?;

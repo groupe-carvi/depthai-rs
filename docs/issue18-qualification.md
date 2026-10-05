@@ -5,16 +5,16 @@ Status: implementation candidate; hardware qualification pending. Do not close i
 ## Environment and provenance
 
 - Date: 2026-10-05.
-- Windows MSVC workspace: isolated managed worktree on `codex/native-device-ownership`, based on main `43c44aa1e5d3cda2dc1771462b1b0d822efa4ae6`.
+- Windows MSVC workspace: isolated managed worktree on the user-selected `feat/native-device-ownership`, initially based on `43c44aa1e5d3cda2dc1771462b1b0d822efa4ae6`. Latest main `8f40af7f1a7b8be1b33cb58a81701cab29ae2db5` was merged in `4f281e7`; three conflicts were resolved.
 - Native default SDK: DepthAI-Core v3.10.0, upstream prebuilt Windows package; no SDK fork.
 - Linux validation: Ubuntu under WSL, native x86_64 source build. This is software evidence, not USB/physical hardware evidence.
-- Concurrent owned-string helper work remains on `codex/issue-26-owned-c-strings` / PR #29 in the original checkout. This worktree does not modify that checkout or helper.
+- The owned-string helper is now integrated from main through merged PR #31. Existing consumers retain it, and device descriptors also use it. Main's native build cache is retained alongside the SDK matrix, with Linux pinned to Ubuntu 24.04 and SDK-specific cache keys. The original checkout remains untouched.
 
 ## Software results
 
 - Windows `cargo check --workspace --all-targets --locked`: passed (default SDK v3.10.0).
 - Windows `cargo check --workspace --all-targets --locked --features <selector>`: passed separately for v3.1.0, v3.4.0, v3.8.0 and v3.10.0.
-- Windows `cargo test --workspace --all-targets --locked --features v3-10-0`: passed, 90 tests; hardware features disabled.
+- Windows `cargo test --workspace --all-targets --locked --features v3-10-0`: passed after merging main, 96 tests; hardware features disabled.
 - Windows `cargo test --features hit --no-run --locked`: passed. Final two-board binary compiled with `hit,v3-10-0` after evidence logging was updated.
 - Windows `cargo check --example detection_network_node --features rerun,v3-10-0 --locked`: passed.
 - Windows `cargo doc -p depthai -p depthai-sys --no-deps --locked --features v3-10-0`: passed.
@@ -25,6 +25,8 @@ Status: implementation candidate; hardware qualification pending. Do not close i
 Earlier failures were repaired: a descriptor fixture assumed native constructor field selection; the corrected fixture preserves SDK ID/name semantics. v3.1.0 exposed newer-header/API assumptions in the existing wrapper; native capability adapters now preserve supported operations and reject unavailable model-format/device-zoo/resize operations. Tensor-size reads handle older non-const accessors, and older datatype inspection uses native serialization.
 
 Baseline findings retained: unrelated repository formatting drift and absent `examples/video_encoder_rerun_h265.rs` prevent a clean whole-workspace formatting check (confirmed exit 1). The missing optional example remains outside issue #18's scope.
+
+All four SDK checks, Windows/Linux workspace tests, both-crate documentation builds, the detection example and hardware-test compilation were rerun successfully after the main merge. Workflow lint also passed.
 
 ## Required two-board scenarios
 
@@ -46,4 +48,4 @@ Board A: not qualified. Board B: not qualified. Opening, clone/drop/close, camer
 
 ## Delivery and closure
 
-Draft PR: https://github.com/groupe-carvi/depthai-rs/pull/30, using `Refs #18`. Concurrent branch cleanup closed it and renamed the local branch; the plan-specified `codex/native-device-ownership` branch and draft PR were restored, preserving the renamed `feat/native-device-ownership` branch. After all software gates and two physical boards pass, attach the actual scenario log and board identities, add `Closes #18`, and mark the PR ready. Merging then closes the issue.
+Draft PR: https://github.com/groupe-carvi/depthai-rs/pull/32, using `Refs #18`, from `feat/native-device-ownership`. It supersedes closed PR #30 after the user selected the renamed branch. After all software gates and two physical boards pass, attach the actual scenario log and board identities, add `Closes #18`, and mark the PR ready. Merging then closes the issue.

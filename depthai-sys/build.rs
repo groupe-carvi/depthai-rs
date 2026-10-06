@@ -233,18 +233,18 @@ impl DepthaiCoreVersion {
             DepthaiCoreVersion::Latest => {
                 LATEST_SUPPORTED_DEPTHAI_CORE_TAG.windows_opencv_runtime()
             }
-            // depthai-core v3.6.1 through v3.10.0 were compiled against OpenCV 4.13.0.
+            // v3.4.0 and v3.6.1 through v3.10.0 import OpenCV 4.13.0.
             DepthaiCoreVersion::V3_10_0
             | DepthaiCoreVersion::V3_9_0
             | DepthaiCoreVersion::V3_8_0
             | DepthaiCoreVersion::V3_7_1
-            | DepthaiCoreVersion::V3_6_1 => WindowsOpenCvRuntime {
+            | DepthaiCoreVersion::V3_6_1
+            | DepthaiCoreVersion::V3_4_0 => WindowsOpenCvRuntime {
                 opencv_version: "4.13.0",
                 world_dll: "opencv_world4130.dll",
             },
-            // All older supported tags were compiled against OpenCV 4.11.0.
+            // Remaining supported tags use OpenCV 4.11.0.
             DepthaiCoreVersion::V3_5_0
-            | DepthaiCoreVersion::V3_4_0
             | DepthaiCoreVersion::V3_3_0
             | DepthaiCoreVersion::V3_2_1
             | DepthaiCoreVersion::V3_2_0
@@ -506,8 +506,8 @@ fn main() {
         }
     };
     let out_dir = env::var("OUT_DIR").unwrap();
-    // OUT_DIR is `<profile>/build/<package-hash>/out`; stage runtime files next to
-    // Cargo's executables in `<profile>`, including with a custom CARGO_TARGET_DIR.
+    // Locate the profile directory across Cargo OUT_DIR layouts, including with
+    // a custom CARGO_TARGET_DIR, to stage runtime files next to executables.
     let target_dir = cache_layout::cargo_profile_dir(Path::new(&out_dir));
     let deps_dir = target_dir.join("deps");
     let examples_dir = target_dir.join("examples");

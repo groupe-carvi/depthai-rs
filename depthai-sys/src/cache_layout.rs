@@ -7,11 +7,12 @@ use std::{
 pub(crate) const CACHE_DIR_ENV: &str = "DEPTHAI_RS_CACHE_DIR";
 const DEFAULT_CACHE_DIR_NAME: &str = ".depthai-rs";
 
-/// Cargo's OUT_DIR is `<profile>/build/<package-hash>/out`.
+/// Cargo uses either `build/<package-hash>/out` or `build/<package>/<hash>/out`.
 pub(crate) fn cargo_profile_dir(out_dir: &Path) -> &Path {
     out_dir
         .ancestors()
-        .nth(3)
+        .find(|path| path.file_name() == Some(OsStr::new("build")))
+        .and_then(Path::parent)
         .expect("OUT_DIR must contain Cargo's profile/build/package/out layout")
 }
 
@@ -100,8 +101,10 @@ mod tests {
             "custom-target/x86_64-pc-windows-msvc/debug",
         ] {
             let profile = Path::new(profile);
-            let out = profile.join("build/depthai-sys-hash/out");
-            assert_eq!(cargo_profile_dir(&out), profile);
+            for suffix in ["build/depthai-sys-hash/out", "build/depthai-sys/hash/out"] {
+                let out = profile.join(suffix);
+                assert_eq!(cargo_profile_dir(&out), profile);
+            }
         }
     }
 

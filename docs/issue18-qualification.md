@@ -32,6 +32,8 @@ Windows runtime staging: sequential SDK checks in a shared Cargo target director
 
 CI follow-up (2026-10-06): hosted run `37373949838` passed all four Linux SDK jobs and docs.rs, but all four Windows jobs failed with `STATUS_DLL_NOT_FOUND`. The build script selected the parent of the Cargo profile directory, staging DLLs into `target/` instead of `target/debug/`; manual runtime staging in the earlier local run masked this defect. Runtime and library probing now share the correct profile-directory helper, with regression coverage for debug, release and custom cross-target layouts. Windows staging creates its destination directories before copying DLLs. Fresh-target execution and the replacement hosted run validate this correction separately from the earlier manual-staging results.
 
+Follow-up run `37414149750` passed Windows workspace tests on v3.8.0 and v3.10.0, but v3.4.0 still lacked a dependency: its native PE import table requires `opencv_world4130.dll`, while our mapping selected 4.11.0. The v3.4.0 mapping now selects the versioned OpenCV 4.13.0 cache, verified against the upstream DLL. v3.1.0 imports 4.11.0; v3.8.0/v3.10.0 import 4.13.0. Profile detection also supports both Cargo layouts (`build/package-hash/out` and `build/package/hash/out`), which differ between the hosted stable runner and the local toolchain.
+
 ## Required two-board scenarios
 
 Run `cargo test --features hit --test multi_device_hit -- --test-threads=1 --nocapture` separately from other hardware binaries. The test never skips missing hardware. Explicit IDs are selected with `DAI_TEST_DEVICE_ID` and `DAI_TEST_DEVICE_ID_2`; absent IDs select distinct native available descriptors. Duplicate, missing or unavailable selections block qualification.

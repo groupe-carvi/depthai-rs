@@ -14,7 +14,7 @@ use depthai::{
     DetectionNetworkNode, Device, DevicePlatform, ImgDetection, ImgDetections, NNArchive,
     NNArchiveOptions, NNModelDescription, Pipeline, ProgressFormat, ZooFetchOptions,
     camera::{CameraBoardSocket, CameraNode, ImageFrame, ImageFrameType, OutputQueue, ResizeMode},
-    connected_device_ids, get_model_from_zoo,
+    get_model_from_zoo,
     queue::MessageQueue,
 };
 use signal_hook::{
@@ -113,13 +113,10 @@ fn run(shutdown: Arc<AtomicBool>) -> AppResult<()> {
 }
 
 fn open_device() -> AppResult<(Device, DevicePlatform)> {
-    let ids = connected_device_ids()?;
-    let device_id = ids
-        .first()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no connected OAK device found"))?;
-
-    eprintln!("Connecting to OAK device {device_id}.");
-    let device = Device::new_with_device_id(device_id)?;
+    let info = Device::first_available()?
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no available OAK device found"))?;
+    eprintln!("Connecting to OAK device {}.", info.device_id());
+    let device = Device::open(&info)?;
     let connected_cameras = device.connected_cameras()?;
 
     if !connected_cameras.contains(&CameraBoardSocket::CamA) {

@@ -2,9 +2,9 @@ use crate::ffi_string::take_dai_owned_string_lossy;
 use std::ffi::CString;
 use std::sync::Arc;
 
-use depthai_sys::{depthai, DaiNode};
+use depthai_sys::{DaiNode, depthai};
 
-use crate::error::{clear_error_flag, last_error, take_error_if_any, Result};
+use crate::error::{Result, clear_error_flag, last_error, take_error_if_any};
 
 use super::PipelineInner;
 
@@ -20,6 +20,21 @@ unsafe impl Sync for Node {}
 impl Node {
     pub(crate) fn from_handle(pipeline: Arc<PipelineInner>, handle: DaiNode) -> Self {
         Self { pipeline, handle }
+    }
+
+    /// Return the native device association as another shared connection handle.
+    /// Host-only nodes and unassociated host-runnable nodes return `None`.
+    pub fn device(&self) -> Result<Option<crate::Device>> {
+        clear_error_flag();
+        let handle = unsafe { depthai::dai_node_get_device(self.handle) };
+        if let Some(error) = take_error_if_any("failed to get native node device") {
+            return Err(error);
+        }
+        if handle.is_null() {
+            Ok(None)
+        } else {
+            Ok(Some(crate::Device::from_handle(handle)))
+        }
     }
 
     pub fn handle(&self) -> DaiNode {
@@ -121,9 +136,8 @@ impl Node {
 pub(crate) fn create_node_by_name(pipeline: Arc<PipelineInner>, name: &str) -> Result<Node> {
     clear_error_flag();
     let name_c = CString::new(name).map_err(|_| last_error("invalid node name"))?;
-    let handle = unsafe {
-        depthai::dai_pipeline_create_node_by_name(pipeline.handle, name_c.as_ptr())
-    };
+    let handle =
+        unsafe { depthai::dai_pipeline_create_node_by_name(pipeline.handle, name_c.as_ptr()) };
     if handle.is_null() {
         Err(last_error("failed to create node by name"))
     } else {

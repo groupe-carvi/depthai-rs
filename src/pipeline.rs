@@ -3,7 +3,7 @@ pub mod device_node;
 pub mod node;
 
 use autocxx::c_int;
-use depthai_sys::{depthai, DaiPipeline};
+use depthai_sys::{DaiPipeline, depthai};
 pub use device_node::{CreateInPipeline, CreateInPipelineWith, DeviceNode, DeviceNodeWithParams};
 pub use node::Node;
 
@@ -17,9 +17,9 @@ use std::{
 use crate::{
     camera::{CameraBoardSocket, CameraNode},
     device::Device,
-    error::{clear_error_flag, last_error, DepthaiError, Result},
-    host_node::{create_host_node, HostNode, HostNodeImpl},
-    threaded_host_node::{create_threaded_host_node, ThreadedHostNode, ThreadedHostNodeImpl},
+    error::{DepthaiError, Result, clear_error_flag, last_error},
+    host_node::{HostNode, HostNodeImpl, create_host_node},
+    threaded_host_node::{ThreadedHostNode, ThreadedHostNodeImpl, create_threaded_host_node},
 };
 
 /// OpenVINO version to use for a pipeline.
@@ -229,11 +229,7 @@ impl PipelineBuilder {
         } else if let Some(create_implicit_device) = self.create_implicit_device {
             Pipeline::new_with_implicit_device(create_implicit_device)?
         } else {
-            // Resolve the default device through our connection cache instead of letting the
-            // native implicit-device constructor rediscover stale network entries. Binding the
-            // pipeline explicitly also makes it share an existing default connection.
-            let device = Device::new()?;
-            Pipeline::create_with_device(&device)?
+            Pipeline::new_with_implicit_device(true)?
         };
 
         if let Some(v) = self.xlink_chunk_size {
@@ -362,7 +358,7 @@ impl Pipeline {
     }
 
     /// Generic method to create device nodes of any type implementing DeviceNode
-    /// 
+    ///
     /// # Example
     /// ```ignore
     /// let pipeline = Pipeline::new().build()?;
@@ -374,7 +370,7 @@ impl Pipeline {
     }
 
     /// Generic method to create device nodes that require parameters
-    /// 
+    ///
     /// # Example
     /// ```ignore
     /// let pipeline = Pipeline::new().build()?;
@@ -382,6 +378,40 @@ impl Pipeline {
     /// ```
     pub fn create_with<T: CreateInPipelineWith<P>, P>(&self, params: P) -> Result<T> {
         T::create_with(self, params)
+    }
+
+    /// Create a native node owned by the selected shared device connection.
+    /// Placement can be inspected before execution. Current SDKs execute device
+    /// nodes on one default connection; multi-device execution is rejected.
+    pub fn create_on<T: CreateInPipeline>(&self, device: &Device) -> Result<T> {
+        T::create_on(self, device)
+    }
+
+    /// Parameterized native creation on a selected device (for example a camera socket).
+    pub fn create_with_on<T: CreateInPipelineWith<P>, P>(
+        &self,
+        device: &Device,
+        params: P,
+    ) -> Result<T> {
+        T::create_with_on(self, device, params)
+    }
+
+    /// Create a native device node by C++ class name with explicit ownership.
+    /// Host-only classes reject placement rather than ignoring the device.
+    pub fn create_node_on(&self, name: &str, device: &Device) -> Result<Node> {
+        let name =
+            CString::new(name).map_err(|_| DepthaiError::new("node name contains a NUL byte"))?;
+        clear_error_flag();
+        let handle = unsafe {
+            depthai::dai_pipeline_create_node_on(self.inner.handle, name.as_ptr(), device.handle())
+        };
+        if handle.is_null() {
+            Err(last_error(
+                "failed to create native node on selected device",
+            ))
+        } else {
+            Ok(Node::from_handle(self.inner_arc(), handle))
+        }
     }
 
     /// Create a native node by its C++ class name.
@@ -395,7 +425,10 @@ impl Pipeline {
     }
 
     /// Create a custom threaded host node implemented in Rust.
-    pub fn create_threaded_host_node<T: ThreadedHostNodeImpl, F>(&self, init: F) -> Result<ThreadedHostNode>
+    pub fn create_threaded_host_node<T: ThreadedHostNodeImpl, F>(
+        &self,
+        init: F,
+    ) -> Result<ThreadedHostNode>
     where
         F: FnOnce(&ThreadedHostNode) -> Result<T>,
     {
@@ -404,8 +437,9 @@ impl Pipeline {
 
     pub fn create_camera(&self, socket: CameraBoardSocket) -> Result<CameraNode> {
         clear_error_flag();
-        let handle =
-            unsafe { depthai::dai_pipeline_create_camera(self.inner.handle, c_int(socket.as_raw())) };
+        let handle = unsafe {
+            depthai::dai_pipeline_create_camera(self.inner.handle, c_int(socket.as_raw()))
+        };
         if handle.is_null() {
             Err(last_error("failed to create camera node"))
         } else {
@@ -598,7 +632,8 @@ impl Pipeline {
     /// Mirrors C++: `pipeline.serializeToJson(includeAssets)`.
     pub fn serialize_to_json(&self, include_assets: bool) -> Result<serde_json::Value> {
         clear_error_flag();
-        let ptr = unsafe { depthai::dai_pipeline_serialize_to_json(self.inner.handle, include_assets) };
+        let ptr =
+            unsafe { depthai::dai_pipeline_serialize_to_json(self.inner.handle, include_assets) };
         let s =
             unsafe { take_dai_owned_string_lossy(ptr, "failed to serialize pipeline to json") }?;
         parse_json_value(&s)
@@ -608,7 +643,10 @@ impl Pipeline {
     pub fn schema_json(&self, serialization_type: SerializationType) -> Result<serde_json::Value> {
         clear_error_flag();
         let ptr = unsafe {
-            depthai::dai_pipeline_get_schema_json(self.inner.handle, c_int(serialization_type as i32))
+            depthai::dai_pipeline_get_schema_json(
+                self.inner.handle,
+                c_int(serialization_type as i32),
+            )
         };
         let s = unsafe { take_dai_owned_string_lossy(ptr, "failed to get pipeline schema json") }?;
         parse_json_value(&s)
@@ -634,8 +672,9 @@ impl Pipeline {
         let ptr = unsafe { depthai::dai_pipeline_get_source_nodes_json(self.inner.handle) };
         let s = unsafe { take_dai_owned_string_lossy(ptr, "failed to get pipeline source nodes") }?;
         let v = parse_json_value(&s)?;
-        serde_json::from_value(v)
-            .map_err(|e| DepthaiError::new(format!("invalid source nodes JSON from depthai-core: {e}")))
+        serde_json::from_value(v).map_err(|e| {
+            DepthaiError::new(format!("invalid source nodes JSON from depthai-core: {e}"))
+        })
     }
 
     /// Get a node handle by its id.
@@ -690,13 +729,17 @@ impl Pipeline {
         let s =
             unsafe { take_dai_owned_string_lossy(ptr, "failed to get pipeline connection map") }?;
         let v = parse_json_value(&s)?;
-        let raw: HashMap<String, Vec<PipelineConnectionInfo>> = serde_json::from_value(v)
-            .map_err(|e| DepthaiError::new(format!("invalid connection map JSON from depthai-core: {e}")))?;
+        let raw: HashMap<String, Vec<PipelineConnectionInfo>> =
+            serde_json::from_value(v).map_err(|e| {
+                DepthaiError::new(format!(
+                    "invalid connection map JSON from depthai-core: {e}"
+                ))
+            })?;
         let mut out = HashMap::with_capacity(raw.len());
         for (k, v) in raw {
-            let id = k.parse::<i32>().map_err(|e| {
-                DepthaiError::new(format!("invalid connection map key '{k}': {e}"))
-            })?;
+            let id = k
+                .parse::<i32>()
+                .map_err(|e| DepthaiError::new(format!("invalid connection map key '{k}': {e}")))?;
             out.insert(id, v);
         }
         Ok(out)
@@ -708,7 +751,9 @@ impl Pipeline {
     pub fn is_calibration_data_available(&self) -> Result<bool> {
         clear_error_flag();
         let v = unsafe { depthai::dai_pipeline_is_calibration_data_available(self.inner.handle) };
-        if let Some(e) = crate::error::take_error_if_any("failed to query pipeline calibration availability") {
+        if let Some(e) =
+            crate::error::take_error_if_any("failed to query pipeline calibration availability")
+        {
             Err(e)
         } else {
             Ok(v)
@@ -724,11 +769,7 @@ impl Pipeline {
         let s =
             unsafe { take_dai_owned_string_lossy(ptr, "failed to get pipeline calibration data") }?;
         let v = parse_json_value(&s)?;
-        if v.is_null() {
-            Ok(None)
-        } else {
-            Ok(Some(v))
-        }
+        if v.is_null() { Ok(None) } else { Ok(Some(v)) }
     }
 
     /// Set calibration data from EEPROM JSON.
@@ -742,7 +783,9 @@ impl Pipeline {
         let s = serde_json::to_string(eeprom_data)
             .map_err(|e| DepthaiError::new(format!("failed to serialize JSON: {e}")))?;
         let c = CString::new(s).map_err(|_| last_error("invalid JSON (contains NUL)"))?;
-        let ok = unsafe { depthai::dai_pipeline_set_calibration_data_json(self.inner.handle, c.as_ptr()) };
+        let ok = unsafe {
+            depthai::dai_pipeline_set_calibration_data_json(self.inner.handle, c.as_ptr())
+        };
         if ok {
             Ok(())
         } else {
@@ -766,7 +809,9 @@ impl Pipeline {
         let s = serde_json::to_string(value)
             .map_err(|e| DepthaiError::new(format!("failed to serialize JSON: {e}")))?;
         let c = CString::new(s).map_err(|_| last_error("invalid JSON (contains NUL)"))?;
-        let ok = unsafe { depthai::dai_pipeline_set_global_properties_json(self.inner.handle, c.as_ptr()) };
+        let ok = unsafe {
+            depthai::dai_pipeline_set_global_properties_json(self.inner.handle, c.as_ptr())
+        };
         if ok {
             Ok(())
         } else {
@@ -788,7 +833,8 @@ impl Pipeline {
         let s = serde_json::to_string(value)
             .map_err(|e| DepthaiError::new(format!("failed to serialize JSON: {e}")))?;
         let c = CString::new(s).map_err(|_| last_error("invalid JSON (contains NUL)"))?;
-        let ok = unsafe { depthai::dai_pipeline_set_board_config_json(self.inner.handle, c.as_ptr()) };
+        let ok =
+            unsafe { depthai::dai_pipeline_set_board_config_json(self.inner.handle, c.as_ptr()) };
         if ok {
             Ok(())
         } else {
@@ -822,7 +868,8 @@ impl Pipeline {
         let s = serde_json::to_string(value)
             .map_err(|e| DepthaiError::new(format!("failed to serialize JSON: {e}")))?;
         let c = CString::new(s).map_err(|_| last_error("invalid JSON (contains NUL)"))?;
-        let ok = unsafe { depthai::dai_pipeline_set_eeprom_data_json(self.inner.handle, c.as_ptr()) };
+        let ok =
+            unsafe { depthai::dai_pipeline_set_eeprom_data_json(self.inner.handle, c.as_ptr()) };
         if ok {
             Ok(())
         } else {
@@ -867,9 +914,8 @@ impl Pipeline {
             .to_str()
             .ok_or_else(|| last_error("recording path must be valid UTF-8"))?;
         let c = CString::new(path_str).map_err(|_| last_error("invalid path"))?;
-        let ok = unsafe {
-            depthai::dai_pipeline_enable_holistic_replay(self.inner.handle, c.as_ptr())
-        };
+        let ok =
+            unsafe { depthai::dai_pipeline_enable_holistic_replay(self.inner.handle, c.as_ptr()) };
         if ok {
             Ok(())
         } else {

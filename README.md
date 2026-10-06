@@ -248,3 +248,7 @@ cargo test --features hit
 ## License
 
 See `LICENSE`.
+
+## Native discovery and ownership
+
+See [the migration and multi-board execution guide](docs/native-device-ownership.md) for structured discovery, explicit opening, shared connection ownership and per-node placement.

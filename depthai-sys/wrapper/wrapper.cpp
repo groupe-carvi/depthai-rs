@@ -5,7 +5,12 @@
 #include "depthai/build/version.hpp"
 #include "depthai/common/ModelType.hpp"
 #include "depthai/common/Point3fRGBA.hpp"
-#include "depthai/common/DeviceModelZoo.hpp"
+#if __has_include("depthai/common/DeviceModelZoo.hpp")
+    #include "depthai/common/DeviceModelZoo.hpp"
+    #define DAI_HAS_DEVICE_MODEL_ZOO 1
+#else
+    #define DAI_HAS_DEVICE_MODEL_ZOO 0
+#endif
 #include "depthai/nn_archive/NNArchive.hpp"
 #include "depthai/nn_archive/NNArchiveEntry.hpp"
 #include "depthai/pipeline/datatype/NNData.hpp"
@@ -90,8 +95,13 @@
 #include <utility>
 
 #if defined(DEPTHAI_XTENSOR_SUPPORT)
-    #include <xtensor/containers/xadapt.hpp>
-    #include <xtensor/containers/xarray.hpp>
+    #if __has_include(<xtensor/containers/xadapt.hpp>)
+        #include <xtensor/containers/xadapt.hpp>
+        #include <xtensor/containers/xarray.hpp>
+    #else
+        #include <xtensor/xadapt.hpp>
+        #include <xtensor/xarray.hpp>
+    #endif
 #endif
 
 // Global error storage
@@ -519,46 +529,8 @@ class RustThreadedHostNode : public dai::NodeCRTP<dai::node::ThreadedHostNode, R
 // To mirror that behavior across the C ABI, we represent `DaiDevice` as a pointer to a
 // heap-allocated `std::shared_ptr<dai::Device>`.
 //
-// We keep a process-wide default device which `dai_device_new()` returns (or creates),
-// and a per-device-ID map for devices opened by `dai_device_new_with_device_id()`.
-// Both are protected by the same mutex so callers targeting the same board share one connection.
-static std::mutex g_device_mutex;
+// Model Zoo serialization is independent of device ownership.
 static std::mutex g_modelzoo_mutex;
-static std::weak_ptr<dai::Device> g_default_device;
-static std::unordered_map<std::string, std::weak_ptr<dai::Device>> g_named_devices;
-
-// Peek which board dai::Device() would select without opening it, so we can check g_named_devices
-// first. Without this we would open a second connection to the same board and get "already in use".
-// Only use devices reported as available: XLink's ANY_STATE enumeration can include stale network
-// entries that are visible in discovery but cannot actually be opened.
-static bool select_first_device_info(dai::DeviceInfo& out) {
-    try {
-        auto devices = dai::DeviceBase::getAllAvailableDevices();
-        if(!devices.empty()) {
-            out = devices.front();
-            return true;
-        }
-
-        // If every board is already in use, prefer a live cached connection over reporting that
-        // no device is available. This covers a device opened by ID before the default constructor.
-        auto connected = dai::XLinkConnection::getAllConnectedDevices(
-            X_LINK_ANY_STATE, /*skipInvalidDevices=*/true);
-        for(const auto& info : connected) {
-            if(info.deviceId.empty()) continue;
-            auto it = g_named_devices.find(info.deviceId);
-            if(it == g_named_devices.end()) continue;
-            if(auto existing = it->second.lock()) {
-                try {
-                    if(!existing->isClosed()) {
-                        out = info;
-                        return true;
-                    }
-                } catch(...) {}
-            }
-        }
-    } catch(...) {}
-    return false;
-}
 
 namespace dai {
 
@@ -645,174 +617,143 @@ void dai_free_cstring(char* cstring) {
 }
 
 // Low-level device operations - direct pointer manipulation
+
+namespace {
+template <typename F>
+auto device_ffi(const char* context, F&& operation) -> decltype(operation()) {
+    dai_clear_last_error();
+    try { return operation(); }
+    catch(const std::exception& e) { last_error = std::string(context) + ": " + e.what(); }
+    catch(...) { last_error = std::string(context) + ": unknown native exception"; }
+    return {};
+}
+const dai::DeviceInfo& device_info(DaiDeviceInfo info) {
+    if(!info) throw std::invalid_argument("null device info");
+    return *static_cast<const dai::DeviceInfo*>(info);
+}
+const std::shared_ptr<dai::Device>& shared_device(DaiDevice device) {
+    if(!device) throw std::invalid_argument("null device");
+    const auto& result = *static_cast<const std::shared_ptr<dai::Device>*>(device);
+    if(!result) throw std::invalid_argument("empty device connection");
+    return result;
+}
+// Current native serialization and XLink bridges target one default connection.
+// Validate before any graph-build stages or device startup can change native state.
+void validate_device_ownership(dai::Pipeline* pipeline) {
+    if(!pipeline) throw std::invalid_argument("null pipeline");
+    const auto defaultDevice = pipeline->getDefaultDevice();
+    for(const auto& node : pipeline->getAllNodes()) {
+        if(!node || node->runOnHost()) continue;
+        const auto* deviceNode = dynamic_cast<const dai::DeviceNode*>(node.get());
+        const auto owner = deviceNode ? deviceNode->getDevice() : nullptr;
+        const std::string context = std::string("node ") + std::to_string(node->id) + " (" + node->getName() + ")";
+        const std::string ownerId = owner ? owner->getDeviceInfo().deviceId : "<none>";
+        const std::string defaultId = defaultDevice ? defaultDevice->getDeviceInfo().deviceId : "<none>";
+        if(!defaultDevice || !owner) {
+            throw std::runtime_error(context + ": missing device connection (owner=" + ownerId + ", default=" + defaultId + ")");
+        }
+        if(defaultDevice->isClosed() || owner->isClosed()) {
+            throw std::runtime_error(context + ": closed device connection (owner=" + ownerId + ", default=" + defaultId + ")");
+        }
+        if(owner.get() != defaultDevice.get()) {
+            throw std::runtime_error(context + ": multiple device connections in one graph are unsupported by this native SDK (owner=" + ownerId + ", default=" + defaultId + "); use separate device-bound pipelines");
+        }
+    }
+}
+const std::vector<dai::DeviceInfo>& device_infos(DaiDeviceInfoArray infos) {
+    if(!infos) throw std::invalid_argument("null descriptor array");
+    return *static_cast<const std::vector<dai::DeviceInfo>*>(infos);
+}
+}
+
+DaiDeviceInfo dai_device_info_new(const char* id_or_name) {
+    return device_ffi("dai_device_info_new", [&]() -> DaiDeviceInfo {
+        if(!id_or_name || !id_or_name[0]) throw std::invalid_argument("empty device ID or name");
+        return new dai::DeviceInfo(std::string(id_or_name));
+    });
+}
+void dai_device_info_delete(DaiDeviceInfo info) { delete static_cast<dai::DeviceInfo*>(info); }
+char* dai_device_info_get_device_id(DaiDeviceInfo info) {
+    return device_ffi("dai_device_info_get_device_id", [&] { return dai_string_to_cstring(device_info(info).deviceId.c_str()); });
+}
+char* dai_device_info_get_name(DaiDeviceInfo info) {
+    return device_ffi("dai_device_info_get_name", [&] { return dai_string_to_cstring(device_info(info).name.c_str()); });
+}
+bool dai_device_info_get_metadata(DaiDeviceInfo info, int* state, int* protocol, int* platform, int* status) {
+    return device_ffi("dai_device_info_get_metadata", [&] {
+        if(!state || !protocol || !platform || !status) throw std::invalid_argument("null metadata output");
+        const auto& value = device_info(info);
+        *state = static_cast<int>(value.state);
+        *protocol = static_cast<int>(value.protocol);
+        *platform = static_cast<int>(value.platform);
+        *status = static_cast<int>(value.status);
+        return true;
+    });
+}
+DaiDeviceInfoArray dai_device_info_array_new(const DaiDeviceInfo* infos, size_t count) {
+    return device_ffi("dai_device_info_array_new", [&]() -> DaiDeviceInfoArray {
+        if(count && !infos) throw std::invalid_argument("null descriptor inputs");
+        auto result = std::make_unique<std::vector<dai::DeviceInfo>>();
+        result->reserve(count);
+        for(size_t i = 0; i < count; ++i) result->push_back(device_info(infos[i]));
+        return result.release();
+    });
+}
+size_t dai_device_info_array_len(DaiDeviceInfoArray infos) {
+    return device_ffi("dai_device_info_array_len", [&] { return device_infos(infos).size(); });
+}
+DaiDeviceInfo dai_device_info_array_get(DaiDeviceInfoArray infos, size_t index) {
+    return device_ffi("dai_device_info_array_get", [&]() -> DaiDeviceInfo {
+        return new dai::DeviceInfo(device_infos(infos).at(index));
+    });
+}
+void dai_device_info_array_delete(DaiDeviceInfoArray infos) { delete static_cast<std::vector<dai::DeviceInfo>*>(infos); }
+DaiDeviceInfoArray dai_device_get_all_available() {
+    return device_ffi("dai_device_get_all_available", []() -> DaiDeviceInfoArray {
+        return new std::vector<dai::DeviceInfo>(dai::DeviceBase::getAllAvailableDevices());
+    });
+}
+DaiDeviceInfoArray dai_device_get_all_connected() {
+    return device_ffi("dai_device_get_all_connected", []() -> DaiDeviceInfoArray {
+        return new std::vector<dai::DeviceInfo>(dai::DeviceBase::getAllConnectedDevices());
+    });
+}
+bool dai_device_get_first_available(DaiDeviceInfo* info) {
+    return device_ffi("dai_device_get_first_available", [&] {
+        if(!info) throw std::invalid_argument("null descriptor output");
+        *info = nullptr;
+        auto result = dai::DeviceBase::getFirstAvailableDevice();
+        if(std::get<0>(result)) *info = new dai::DeviceInfo(std::get<1>(result));
+        return true;
+    });
+}
+bool dai_device_find_by_id(const char* id, DaiDeviceInfo* info) {
+    return device_ffi("dai_device_find_by_id", [&] {
+        if(info) *info = nullptr;
+        if(!id || !id[0] || !info) throw std::invalid_argument("empty device ID or null descriptor output");
+        auto result = dai::DeviceBase::getDeviceById(std::string(id));
+        if(std::get<0>(result)) *info = new dai::DeviceInfo(std::get<1>(result));
+        return true;
+    });
+}
+DaiDevice dai_device_open(DaiDeviceInfo info) {
+    return device_ffi("dai_device_open", [&]() -> DaiDevice {
+        auto connection = std::make_shared<dai::Device>(device_info(info), dai::DeviceBase::DEFAULT_USB_SPEED);
+        return new std::shared_ptr<dai::Device>(std::move(connection));
+    });
+}
+DaiDeviceInfo dai_device_get_info(DaiDevice device) {
+    return device_ffi("dai_device_get_info", [&]() -> DaiDeviceInfo {
+        return new dai::DeviceInfo(shared_device(device)->getDeviceInfo());
+    });
+}
 DaiDevice dai_device_new() {
-    try {
-        dai_clear_last_error();
-        std::lock_guard<std::mutex> lock(g_device_mutex);
-
-        // Fast path: reuse existing default device if still alive and not closed.
-        if(auto existing = g_default_device.lock()) {
-            try {
-                if(!existing->isClosed()) {
-                    return static_cast<DaiDevice>(new std::shared_ptr<dai::Device>(existing));
-                }
-            } catch(...) {}
-        }
-
-        // Pick the "first available" board deterministically, then check the per-device-ID
-        // cache before opening a new connection (handles new_with_device_id() called first).
-        dai::DeviceInfo info;
-        if(!select_first_device_info(info)) {
-            auto numConnected = dai::DeviceBase::getAllAvailableDevices().size();
-            if(numConnected > 0) {
-                throw std::runtime_error(std::string("No available devices (") + std::to_string(numConnected) +
-                                         " connected, but in use)");
-            }
-            throw std::runtime_error("No available devices");
-        }
-
-        // Check the named cache for this specific board before opening a new connection.
-        if(!info.deviceId.empty()) {
-            auto it = g_named_devices.find(info.deviceId);
-            if(it != g_named_devices.end()) {
-                if(auto existing = it->second.lock()) {
-                    try {
-                        if(!existing->isClosed()) {
-                            g_default_device = existing;
-                            return static_cast<DaiDevice>(new std::shared_ptr<dai::Device>(existing));
-                        }
-                    } catch(...) {}
-                }
-            }
-        }
-
-        auto created = std::make_shared<dai::Device>(info, dai::DeviceBase::DEFAULT_USB_SPEED);
-        g_default_device = created;
-        // Cross-register so dai_device_new_with_device_id() can reuse this connection.
-        // getDeviceInfo().deviceId is a field set at connect time, it does not do any RPC (hence no IO under the mutex)
-        std::string dev_id = created->getDeviceInfo().deviceId;
-        if(!dev_id.empty()) {
-            g_named_devices[dev_id] = created;
-        }
-        return static_cast<DaiDevice>(new std::shared_ptr<dai::Device>(created));
-    } catch (const std::exception& e) {
-        last_error = std::string("dai_device_new failed: ") + e.what();
-        return nullptr;
-    }
-}
-
-DaiDevice dai_device_new_with_device_id(const char* device_id) {
-    try {
-        dai_clear_last_error();
-        if(!device_id || device_id[0] == '\0') {
-            last_error = "dai_device_new_with_device_id: null or empty device_id";
-            return nullptr;
-        }
-        std::string device_id_str(device_id);
-        // Reuse an existing connection before performing any discovery calls. Discovery can
-        // synchronously re-enter the C ABI, so it must never run while g_device_mutex is held.
-        {
-            std::lock_guard<std::mutex> lock(g_device_mutex);
-
-            // Reuse existing connection for this device ID if still alive and not closed.
-            auto it = g_named_devices.find(device_id_str);
-            if(it != g_named_devices.end()) {
-                if(auto existing = it->second.lock()) {
-                    try {
-                        if(!existing->isClosed()) {
-                            return static_cast<DaiDevice>(new std::shared_ptr<dai::Device>(existing));
-                        }
-                    } catch(...) {}
-                }
-            }
-
-            // Also check the default device: dai_device_new() may have opened this board
-            // before we were called, but it only registered in g_default_device, not here.
-            if(auto existing = g_default_device.lock()) {
-                try {
-                    if(!existing->isClosed() && existing->getDeviceInfo().deviceId == device_id_str) {
-                        g_named_devices[device_id_str] = existing;
-                        return static_cast<DaiDevice>(new std::shared_ptr<dai::Device>(existing));
-                    }
-                } catch(...) {}
-            }
-        }
-
-        // Avoid handing an unknown ID to the native constructor.  On network-connected RVC4
-        // devices, constructing a DeviceInfo for a missing serial can leave XLink discovery in a
-        // stale state; a following default-device open may then block or report the board as in
-        // use even though no handle was created.  Preserve the native "already in use" behavior
-        // for a known board by checking both available and connected inventories first.
-        bool known_device = false;
-        for(const auto& info : dai::DeviceBase::getAllAvailableDevices()) {
-            if(info.deviceId == device_id_str) {
-                known_device = true;
-                break;
-            }
-        }
-        if(!known_device) {
-            for(const auto& info : dai::XLinkConnection::getAllConnectedDevices(
-                    X_LINK_ANY_STATE, /*skipInvalidDevices=*/true)) {
-                if(info.deviceId == device_id_str) {
-                    known_device = true;
-                    break;
-                }
-            }
-        }
-        if(!known_device) {
-            throw std::runtime_error("No device found with device ID " + device_id_str);
-        }
-
-        // Recheck caches after discovery, then construct the selected device while serialized
-        // against other callers. The discovery phase is intentionally outside this lock.
-        std::lock_guard<std::mutex> lock(g_device_mutex);
-        auto it = g_named_devices.find(device_id_str);
-        if(it != g_named_devices.end()) {
-            if(auto existing = it->second.lock()) {
-                try {
-                    if(!existing->isClosed()) {
-                        return static_cast<DaiDevice>(new std::shared_ptr<dai::Device>(existing));
-                    }
-                } catch(...) {}
-            }
-        }
-        if(auto existing = g_default_device.lock()) {
-            try {
-                if(!existing->isClosed() && existing->getDeviceInfo().deviceId == device_id_str) {
-                    g_named_devices[device_id_str] = existing;
-                    return static_cast<DaiDevice>(new std::shared_ptr<dai::Device>(existing));
-                }
-            } catch(...) {}
-        }
-
-        dai::DeviceInfo info(device_id_str);
-        auto created = std::make_shared<dai::Device>(info, dai::DeviceBase::DEFAULT_USB_SPEED);
-        g_named_devices[device_id_str] = created;
-        return static_cast<DaiDevice>(new std::shared_ptr<dai::Device>(created));
-    } catch (const std::exception& e) {
-        last_error = std::string("dai_device_new_with_device_id failed: ") + e.what();
-        return nullptr;
-    }
-}
-
-// Returns a newline-delimited list of device IDs for all connected OAK boards
-// Returns an empty string when none are connected
-char* dai_get_connected_device_ids() {
-    try {
-        dai_clear_last_error();
-        auto devices = dai::XLinkConnection::getAllConnectedDevices(X_LINK_ANY_STATE, /*skipInvalidDevices=*/true);
-        std::string result;
-        for(const auto& dev : devices) {
-            if(!dev.deviceId.empty()) {
-                if(!result.empty()) result += '\n';
-                result += dev.deviceId;
-            }
-        }
-        return dai_string_to_cstring(result.c_str());
-    } catch(const std::exception& e) {
-        last_error = std::string("dai_get_connected_device_ids failed: ") + e.what();
-        return nullptr;
-    }
+    return device_ffi("dai_device_new", []() -> DaiDevice {
+        auto result = dai::DeviceBase::getFirstAvailableDevice();
+        if(!std::get<0>(result)) throw std::runtime_error("No available devices");
+        auto connection = std::make_shared<dai::Device>(std::get<1>(result), dai::DeviceBase::DEFAULT_USB_SPEED);
+        return new std::shared_ptr<dai::Device>(std::move(connection));
+    });
 }
 
 DaiDevice dai_device_clone(DaiDevice device) {
@@ -975,6 +916,7 @@ bool dai_pipeline_start(DaiPipeline pipeline) {
     }
     try {
         auto pipe = static_cast<dai::Pipeline*>(pipeline);
+        validate_device_ownership(pipe);
         pipe->start();
         return true;
     } catch (const std::exception& e) {
@@ -1018,6 +960,7 @@ bool dai_pipeline_build(DaiPipeline pipeline) {
     }
     try {
         auto pipe = static_cast<dai::Pipeline*>(pipeline);
+        validate_device_ownership(pipe);
         pipe->build();
         return true;
     } catch(const std::exception& e) {
@@ -1063,6 +1006,7 @@ bool dai_pipeline_run(DaiPipeline pipeline) {
     }
     try {
         auto pipe = static_cast<dai::Pipeline*>(pipeline);
+        validate_device_ownership(pipe);
         pipe->run();
         return true;
     } catch(const std::exception& e) {
@@ -1724,14 +1668,31 @@ DaiDevice dai_pipeline_get_default_device(DaiPipeline pipeline) {
 }
 
 // Generic node creation / linking
-using NodeCreator = std::function<dai::Node*(dai::Pipeline*)>;
+using NodeCreator = std::function<dai::Node*(dai::Pipeline*, const std::shared_ptr<dai::Device>&)>;
 
-#define REGISTER_NODE(name) registry[#name] = [](dai::Pipeline* p) { return p->create<name>().get(); }
+template <typename N>
+dai::Node* create_registered_node(dai::Pipeline* pipeline, const std::shared_ptr<dai::Device>& device) {
+    if(!device) return pipeline->create<N>().get();
+    if constexpr(std::is_base_of<dai::DeviceNode, N>::value) {
+        if(device->isClosed()) throw std::runtime_error("selected device connection is closed");
+        auto selected_device = device;
+        auto node = N::create(selected_device);
+        pipeline->add(node);
+        return node.get();
+    } else {
+        throw std::invalid_argument("explicit device placement is unsupported for a host-only node");
+    }
+}
 
-static std::unordered_map<std::string, NodeCreator>& get_node_registry() {
-    static std::unordered_map<std::string, NodeCreator> registry;
-    if (registry.empty()) {
+#define REGISTER_NODE(name) registry[#name] = create_registered_node<name>
+
+static const std::unordered_map<std::string, NodeCreator>& get_node_registry() {
+    static const auto creators = [] {
+        std::unordered_map<std::string, NodeCreator> registry;
         REGISTER_NODE(dai::node::Camera);
+    #if DAI_HAS_NODE_GATE
+        REGISTER_NODE(dai::node::Gate);
+    #endif
         REGISTER_NODE(dai::node::ColorCamera);
         REGISTER_NODE(dai::node::MonoCamera);
         REGISTER_NODE(dai::node::StereoDepth);
@@ -1774,10 +1735,11 @@ static std::unordered_map<std::string, NodeCreator>& get_node_registry() {
         REGISTER_NODE(dai::node::Thermal);
 
         // XLink nodes are in internal namespace but we expose them as dai::node::XLinkIn/Out
-        registry["dai::node::XLinkIn"] = [](dai::Pipeline* p) { return p->create<dai::node::internal::XLinkIn>().get(); };
-        registry["dai::node::XLinkOut"] = [](dai::Pipeline* p) { return p->create<dai::node::internal::XLinkOut>().get(); };
-    }
-    return registry;
+        registry["dai::node::XLinkIn"] = create_registered_node<dai::node::internal::XLinkIn>;
+        registry["dai::node::XLinkOut"] = create_registered_node<dai::node::internal::XLinkOut>;
+        return registry;
+    }();
+    return creators;
 }
 
 DaiNode dai_pipeline_create_node_by_name(DaiPipeline pipeline, const char* name) {
@@ -1790,7 +1752,7 @@ DaiNode dai_pipeline_create_node_by_name(DaiPipeline pipeline, const char* name)
         auto& registry = get_node_registry();
         auto it = registry.find(name);
         if (it != registry.end()) {
-            return static_cast<DaiNode>(it->second(pipe));
+            return static_cast<DaiNode>(it->second(pipe, nullptr));
         }
         
         last_error = std::string("dai_pipeline_create_node_by_name: unknown node name: ") + name;
@@ -1799,6 +1761,28 @@ DaiNode dai_pipeline_create_node_by_name(DaiPipeline pipeline, const char* name)
         last_error = std::string("dai_pipeline_create_node_by_name failed: ") + e.what();
         return nullptr;
     }
+}
+
+
+DaiNode dai_pipeline_create_node_on(DaiPipeline pipeline, const char* name, DaiDevice device) {
+    return device_ffi("dai_pipeline_create_node_on", [&]() -> DaiNode {
+        if(!pipeline || !name || !name[0]) throw std::invalid_argument("null pipeline or empty node name");
+        const auto& connection = shared_device(device);
+        const auto& registry = get_node_registry();
+        auto found = registry.find(name);
+        if(found == registry.end()) throw std::invalid_argument(std::string("unknown node name: ") + name);
+        return found->second(static_cast<dai::Pipeline*>(pipeline), connection);
+    });
+}
+DaiDevice dai_node_get_device(DaiNode node) {
+    return device_ffi("dai_node_get_device", [&]() -> DaiDevice {
+        if(!node) throw std::invalid_argument("null node");
+        const auto* deviceNode = dynamic_cast<const dai::DeviceNode*>(static_cast<dai::Node*>(node));
+        if(!deviceNode) return nullptr;
+        auto connection = deviceNode->getDevice();
+        if(!connection) return nullptr;
+        return new std::shared_ptr<dai::Device>(std::move(connection));
+    });
 }
 
 // Forward declarations for helpers defined later in this file.
@@ -2888,7 +2872,7 @@ static size_t _dai_tensor_element_size(dai::TensorInfo::DataType data_type) {
     return 0;
 }
 
-static nlohmann::json _dai_tensor_info_json(const dai::TensorInfo& info) {
+static nlohmann::json _dai_tensor_info_json(dai::TensorInfo info) {
     return nlohmann::json{
         {"name", info.name},
         {"dataType", static_cast<int>(info.dataType)},
@@ -3128,7 +3112,7 @@ char* dai_nn_data_get_tensor_info_json(DaiNNData nn_data, const char* name) {
             last_error = "dai_nn_data_get_tensor_info_json: invalid NNData";
             return nullptr;
         }
-        const auto info = (*ptr)->getTensorInfo(name);
+        auto info = (*ptr)->getTensorInfo(name);
         if(!info.has_value()) {
             return dai_string_to_cstring("null");
         }
@@ -3188,7 +3172,7 @@ size_t dai_nn_data_get_tensor_data_size(DaiNNData nn_data, const char* name) {
             last_error = "dai_nn_data_get_tensor_data_size: invalid NNData";
             return 0;
         }
-        const auto info = (*ptr)->getTensorInfo(name);
+        auto info = (*ptr)->getTensorInfo(name);
         if(!info.has_value()) {
             last_error = "dai_nn_data_get_tensor_data_size: tensor does not exist";
             return 0;
@@ -3222,7 +3206,7 @@ bool dai_nn_data_copy_tensor_data(DaiNNData nn_data,
             last_error = "dai_nn_data_copy_tensor_data: invalid NNData";
             return false;
         }
-        const auto info = (*ptr)->getTensorInfo(name);
+        auto info = (*ptr)->getTensorInfo(name);
         if(!info.has_value()) {
             last_error = "dai_nn_data_copy_tensor_data: tensor does not exist";
             return false;
@@ -5448,6 +5432,17 @@ DaiDatatype dai_datatype_clone(DaiDatatype msg) {
     }
 }
 
+// Older SDKs expose the type through serialization rather than getDatatype().
+template <typename T>
+auto native_datatype(T& value, int) -> decltype(value.getDatatype()) { return value.getDatatype(); }
+template <typename T>
+dai::DatatypeEnum native_datatype(T& value, long) {
+    std::vector<uint8_t> metadata;
+    dai::DatatypeEnum datatype{};
+    value.serialize(metadata, datatype);
+    return datatype;
+}
+
 int dai_datatype_get_datatype_enum(DaiDatatype msg) {
     if(!msg) {
         last_error = "dai_datatype_get_datatype_enum: null msg";
@@ -5456,7 +5451,7 @@ int dai_datatype_get_datatype_enum(DaiDatatype msg) {
     try {
         auto ptr = static_cast<std::shared_ptr<dai::ADatatype>*>(msg);
         if(!ptr->get() || !(*ptr)) return -1;
-        return static_cast<int>((*ptr)->getDatatype());
+        return static_cast<int>(native_datatype(**ptr, 0));
     } catch(const std::exception& e) {
         last_error = std::string("dai_datatype_get_datatype_enum failed: ") + e.what();
         return -1;
@@ -7482,6 +7477,16 @@ void dai_neural_network_set_blob_bytes(DaiNode node, const void* data, size_t le
     }
 }
 
+template <typename N, typename V>
+auto native_other_model(N& network, V&& value, int)
+    -> decltype(network.setOtherModelFormat(std::forward<V>(value)), void()) {
+    network.setOtherModelFormat(std::forward<V>(value));
+}
+template <typename N, typename V>
+void native_other_model(N&, V&&, long) {
+    throw std::runtime_error("other-model format is unsupported by this native SDK");
+}
+
 void dai_neural_network_set_other_model_path(DaiNode node, const char* path) {
     auto* nn = _dai_as_neural_network(node, "dai_neural_network_set_other_model_path");
     if(!nn) return;
@@ -7490,7 +7495,7 @@ void dai_neural_network_set_other_model_path(DaiNode node, const char* path) {
         return;
     }
     try {
-        nn->setOtherModelFormat(std::filesystem::u8path(path));
+        native_other_model(*nn, std::filesystem::u8path(path), 0);
     } catch(const std::exception& e) {
         last_error = std::string("dai_neural_network_set_other_model_path failed: ") + e.what();
     }
@@ -7509,7 +7514,7 @@ void dai_neural_network_set_other_model_bytes(DaiNode node, const void* data, si
             const auto* begin = static_cast<const uint8_t*>(data);
             bytes.assign(begin, begin + len);
         }
-        nn->setOtherModelFormat(std::move(bytes));
+        native_other_model(*nn, std::move(bytes), 0);
     } catch(const std::exception& e) {
         last_error = std::string("dai_neural_network_set_other_model_bytes failed: ") + e.what();
     }
@@ -7618,11 +7623,15 @@ void dai_neural_network_set_model_from_device_zoo(DaiNode node, int model) {
         last_error = "dai_neural_network_set_model_from_device_zoo: invalid model";
         return;
     }
+#if DAI_HAS_DEVICE_MODEL_ZOO
     try {
         nn->setModelFromDeviceZoo(static_cast<dai::DeviceModelZoo>(model));
     } catch(const std::exception& e) {
         last_error = std::string("dai_neural_network_set_model_from_device_zoo failed: ") + e.what();
     }
+#else
+    last_error = "dai_neural_network_set_model_from_device_zoo: unsupported by this native SDK";
+#endif
 }
 
 bool dai_neural_network_build_from_output(DaiNode node, DaiOutput input, DaiNNArchive archive) {
@@ -7644,6 +7653,21 @@ bool dai_neural_network_build_from_output(DaiNode node, DaiOutput input, DaiNNAr
     }
 }
 
+template <typename N, typename M>
+auto native_camera_network(N& network, const std::shared_ptr<dai::node::Camera>& camera,
+                           const M& model, std::optional<float> fps,
+                           std::optional<dai::ImgResizeMode> resize, int)
+    -> decltype(network.build(camera, model, fps, resize), void()) {
+    network.build(camera, model, fps, resize);
+}
+template <typename N, typename M>
+void native_camera_network(N& network, const std::shared_ptr<dai::node::Camera>& camera,
+                           const M& model, std::optional<float> fps,
+                           std::optional<dai::ImgResizeMode> resize, long) {
+    if(resize) throw std::runtime_error("neural-network camera resize selection is unsupported by this native SDK");
+    network.build(camera, model, fps);
+}
+
 bool dai_neural_network_build_from_camera_model_json(DaiNode node,
                                                      DaiCameraNode camera,
                                                      const char* model_json,
@@ -7660,11 +7684,10 @@ bool dai_neural_network_build_from_camera_model_json(DaiNode node,
         auto cam = _dai_as_camera(camera, "dai_neural_network_build_from_camera_model_json");
         if(!cam) return false;
         auto description = nn_model_description_from_json(nlohmann::json::parse(model_json));
-        dai::node::NeuralNetwork::Model model{std::move(description)};
-        nn->build(cam,
-                  model,
+        native_camera_network(*nn, cam,
+                  description,
                   _dai_optional_fps(fps),
-                  _dai_optional_resize_mode(resize_mode, "dai_neural_network_build_from_camera_model_json"));
+                  _dai_optional_resize_mode(resize_mode, "dai_neural_network_build_from_camera_model_json"), 0);
         return true;
     } catch(const std::exception& e) {
         last_error = std::string("dai_neural_network_build_from_camera_model_json failed: ") + e.what();
@@ -7683,11 +7706,10 @@ bool dai_neural_network_build_from_camera_archive(DaiNode node,
     try {
         auto cam = _dai_as_camera(camera, "dai_neural_network_build_from_camera_archive");
         if(!cam) return false;
-        dai::node::NeuralNetwork::Model model{**ar};
-        nn->build(cam,
-                  model,
+        native_camera_network(*nn, cam,
+                  **ar,
                   _dai_optional_fps(fps),
-                  _dai_optional_resize_mode(resize_mode, "dai_neural_network_build_from_camera_archive"));
+                  _dai_optional_resize_mode(resize_mode, "dai_neural_network_build_from_camera_archive"), 0);
         return true;
     } catch(const std::exception& e) {
         last_error = std::string("dai_neural_network_build_from_camera_archive failed: ") + e.what();

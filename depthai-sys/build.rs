@@ -508,7 +508,7 @@ fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
     // OUT_DIR is `<profile>/build/<package-hash>/out`; stage runtime files next to
     // Cargo's executables in `<profile>`, including with a custom CARGO_TARGET_DIR.
-    let target_dir = Path::new(&out_dir).ancestors().nth(4).unwrap();
+    let target_dir = cache_layout::cargo_profile_dir(Path::new(&out_dir));
     let deps_dir = target_dir.join("deps");
     let examples_dir = target_dir.join("examples");
 
@@ -601,6 +601,10 @@ fn main() {
             );
         } else {
             println_build!("Copying runtime DLLs from {}", bin_path.display());
+
+            for dest_dir in [target_dir, deps_dir.as_path(), examples_dir.as_path()] {
+                fs::create_dir_all(dest_dir).expect("Failed to create runtime DLL directory");
+            }
 
             let entries = fs::read_dir(&bin_path).expect("Failed to read depthai-core/bin");
             for entry in entries {
@@ -1849,7 +1853,7 @@ fn resolve_depthai_core_lib() -> Result<PathBuf, &'static str> {
         .expect("Failed to acquire the DepthAI-Core cache lock");
     let prefer_static = !env_bool("DEPTHAI_SYS_LINK_SHARED").unwrap_or(false);
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let target_dir = Path::new(&out_dir).ancestors().nth(3).unwrap();
+    let target_dir = cache_layout::cargo_profile_dir(&out_dir);
     let deps_dir = Path::new(&target_dir).join("deps");
 
     if target_os_is("windows") {
@@ -2121,7 +2125,7 @@ fn depthai_core_headers_present() -> bool {
 fn probe_depthai_core_lib(out: PathBuf, prefer_static: bool) -> Option<PathBuf> {
     println_build!("Probing for depthai-core library...");
     let out_dir = env::var("OUT_DIR").unwrap();
-    let target_dir = Path::new(&out_dir).ancestors().nth(3).unwrap();
+    let target_dir = cache_layout::cargo_profile_dir(Path::new(&out_dir));
     let deps_dir = Path::new(&target_dir).join("deps");
 
     let lib_path = if target_os_is("windows") {

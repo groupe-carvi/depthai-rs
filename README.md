@@ -134,6 +134,7 @@ To build docs locally like docs.rs:
 cargo run --example pipeline_creation
 cargo run --example camera
 cargo run --example host_node
+cargo run --example imu
 
 # Examples requiring the optional `rerun` feature
 cargo run --features rerun --example rgbd_rerun
@@ -161,7 +162,7 @@ This table reflects what the Rust crates in this repo currently wrap and demonst
 | `Events`                    |    🔴     |                                                           |
 | `FeatureTracker`            |    🔴     |                                                           |
 | `HostNodes`                 |    🟢     | `examples/host_node.rs`, `examples/threaded_host_node.rs` |
-| `IMU`                       |    🔴     |                                                           |
+| `IMU`                       |    🟢     | `examples/imu.rs`, `src/imu.rs`                           |
 | `ImageAlign`                |    🟢     | `examples/rgbd_rerun.rs`, `src/image_align.rs`            |
 | `ImageManip`                |    🟢     | `examples/image_manip.rs`, `src/image_manip.rs`           |
 | `Misc/AutoReconnect`        |    🔴     |                                                           |

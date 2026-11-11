@@ -10,6 +10,7 @@ use depthai_sys::{DaiDataQueue, DaiDatatype, DaiInputQueue, depthai};
 use crate::camera::ImageFrame;
 use crate::detection_network::ImgDetections;
 use crate::encoded_frame::EncodedFrame;
+use crate::imu::ImuData;
 use crate::error::{Result, clear_error_flag, last_error, take_error_if_any};
 use crate::host_node::{Buffer, MessageGroup};
 use crate::neural_network::NNData;
@@ -217,6 +218,20 @@ impl Datatype {
             }
         } else {
             Ok(Some(EncodedFrame::from_handle(h)))
+        }
+    }
+
+    pub fn as_imu_data(&self) -> Result<Option<ImuData>> {
+        clear_error_flag();
+        let h = unsafe { depthai::dai_datatype_as_imu_data(self.handle) };
+        if h.is_null() {
+            if let Some(err) = take_error_if_any("failed to cast datatype to IMUData") {
+                Err(err)
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(Some(ImuData::from_handle(h)))
         }
     }
 

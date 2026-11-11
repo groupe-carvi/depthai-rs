@@ -9770,4 +9770,18 @@ int dai_camera_get_image_orientation(DaiCameraNode camera) {
 #endif
 }
 
+// --- Depth alignment and calibration -------------------------------------
+
+void dai_stereo_set_depth_align(DaiNode stereo, int camera_socket) {
+    if(!stereo) {
+        last_error = "dai_stereo_set_depth_align: null stereo";
+        return;
+    }
+    try {
+        _dai_as_stereo(stereo)->setDepthAlign(static_cast<dai::CameraBoardSocket>(camera_socket));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_stereo_set_depth_align failed: ") + e.what();
+    }
+}
+
 } // namespace dai

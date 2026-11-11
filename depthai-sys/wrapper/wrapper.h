@@ -948,6 +948,12 @@ API const char *dai_get_last_error();
 API void dai_clear_last_error();
 
 #ifdef __cplusplus
+
+// --- Depth alignment and calibration -------------------------------------
+
+// Align the depth output to a camera socket (`dai::CameraBoardSocket` as an int).
+API void dai_stereo_set_depth_align(DaiNode stereo, int camera_socket);
+
 } // extern "C"
 } // namespace dai
 #endif

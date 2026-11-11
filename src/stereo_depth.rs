@@ -1,6 +1,7 @@
 use autocxx::c_int;
 use depthai_sys::depthai;
 
+use crate::common::CameraBoardSocket;
 use crate::error::clear_error_flag;
 
 #[repr(i32)]
@@ -55,6 +56,15 @@ impl StereoDepthNode {
     pub fn set_output_size(&self, width: i32, height: i32) {
         clear_error_flag();
         unsafe { depthai::dai_stereo_set_output_size(self.node.handle(), c_int(width), c_int(height)) };
+    }
+
+    /// Align the depth output to a camera: the depth picture is then in that camera's view (and, when
+    /// no output size is set, at that camera's size).
+    ///
+    /// Mirrors C++: `StereoDepth::setDepthAlign(camera)`.
+    pub fn set_depth_align(&self, camera: CameraBoardSocket) {
+        clear_error_flag();
+        unsafe { depthai::dai_stereo_set_depth_align(self.node.handle(), c_int(camera as i32)) };
     }
 
     /// Whether resizing done by `set_output_size` should keep aspect ratio (with potential cropping).

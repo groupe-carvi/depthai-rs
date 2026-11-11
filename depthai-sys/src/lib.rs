@@ -224,6 +224,7 @@ include_cpp! {
 
     // StereoDepth configuration helpers
     generate!("dai::dai_stereo_set_subpixel")
+    generate!("dai::dai_stereo_set_depth_align")
     generate!("dai::dai_stereo_set_extended_disparity")
     generate!("dai::dai_stereo_set_default_profile_preset")
     generate!("dai::dai_stereo_set_left_right_check")
@@ -450,6 +451,7 @@ include_cpp! {
     generate!("dai::dai_encoded_frame_get_sequence_num")
     generate!("dai::dai_encoded_frame_set_sequence_num")
     generate!("dai::dai_encoded_frame_release")
+
 
     // PointCloudData accessors
     generate!("dai::dai_pointcloud_get_width")

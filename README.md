@@ -134,6 +134,7 @@ To build docs locally like docs.rs:
 cargo run --example pipeline_creation
 cargo run --example camera
 cargo run --example host_node
+cargo run --example depth_align
 
 # Examples requiring the optional `rerun` feature
 cargo run --features rerun --example rgbd_rerun
@@ -162,7 +163,7 @@ This table reflects what the Rust crates in this repo currently wrap and demonst
 | `FeatureTracker`            |    🔴     |                                                           |
 | `HostNodes`                 |    🟢     | `examples/host_node.rs`, `examples/threaded_host_node.rs` |
 | `IMU`                       |    🔴     |                                                           |
-| `ImageAlign`                |    🟢     | `examples/rgbd_rerun.rs`, `src/image_align.rs`            |
+| `ImageAlign`                |    🟢     | `examples/rgbd_rerun.rs`, `src/image_align.rs` (depth to a stereo camera: `StereoDepthNode::set_depth_align`) |
 | `ImageManip`                |    🟢     | `examples/image_manip.rs`, `src/image_manip.rs`           |
 | `Misc/AutoReconnect`        |    🔴     |                                                           |
 | `Misc/Projectors`           |    🟡     | `Device::set_ir_laser_dot_projector_intensity`            |
@@ -182,7 +183,7 @@ This table reflects what the Rust crates in this repo currently wrap and demonst
 | `Script`                    |    🔴     |                                                           |
 | `SpatialDetectionNetwork`   |    🔴     |                                                           |
 | `SpatialLocationCalculator` |    🔴     |                                                           |
-| `StereoDepth`               |    🟢     | `examples/rgbd_rerun.rs`, `src/stereo_depth.rs`           |
+| `StereoDepth`               |    🟢     | `StereoDepthNode::set_depth_align`, `examples/depth_align.rs`, `examples/rgbd_rerun.rs`, `src/stereo_depth.rs` |
 | `Sync`                      |    🔴     |                                                           |
 | `VideoEncoder`              |    🟢     | `examples/video_encoder.rs`, `src/video_encoder.rs`       |
 | `Visualizer`                |    🔴     |                                                           |

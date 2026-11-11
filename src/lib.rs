@@ -1,7 +1,7 @@
 //! # depthai-rs
 //!
 //! Experimental Rust bindings + safe-ish wrapper for Luxonis **DepthAI-Core v3.1.0+**
-//! (explicitly supports v3.1.0 through v3.10.0; `latest` selects v3.10.0).
+//! (explicitly supports v3.1.0 through v3.12.0; `latest` selects v3.12.0).
 //!
 //! ## API Overview
 //!
@@ -499,6 +499,7 @@ pub use depthai_macros::depthai_host_node;
 pub use depthai_macros::depthai_threaded_host_node;
 pub use depthai_macros::native_node_wrapper;
 
+pub mod calibration;
 pub mod camera;
 pub mod common;
 pub mod detection_network;
@@ -540,6 +541,7 @@ pub use detection_network::{
     DetectionKeypoint, DetectionNetworkNode, DetectionNetworkType, DetectionParserNode,
     DetectionRotatedRect, DetectionSegmentationMask, ImgDetection, ImgDetections,
 };
+pub use calibration::{Calibration, Extrinsics, Intrinsics};
 pub use encoded_frame::{EncodedFrame, EncodedFrameProfile, EncodedFrameQueue, EncodedFrameType};
 pub use gate::{GateControl, GateNode};
 pub use host_node::{Buffer, HostNode, HostNodeImpl, MessageGroup};

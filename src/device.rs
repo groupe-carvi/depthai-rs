@@ -265,6 +265,19 @@ impl Device {
         DeviceInfo::from_handle(unsafe { depthai::dai_device_get_info(self.handle) })
     }
 
+    /// Read the device's factory calibration (intrinsics, distortion and extrinsics).
+    ///
+    /// Mirrors C++: `Device::readCalibration()`.
+    pub fn read_calibration(&self) -> Result<crate::calibration::Calibration> {
+        clear_error_flag();
+        let handle = unsafe { depthai::dai_device_read_calibration(self.handle) };
+        if handle.is_null() {
+            Err(last_error("failed to read the device calibration"))
+        } else {
+            Ok(crate::calibration::Calibration::from_handle(handle))
+        }
+    }
+
     /// Create another handle to the same underlying device connection.
     ///
     /// This mirrors DepthAI's C++ usage where the device is commonly shared via `std::shared_ptr`.

@@ -7,7 +7,7 @@ depthai-rs is an unofficial binding in rust for the Luxonis's DepthAI-Core C++ l
 
 > [!WARNING]
 > DepthAI-Core itself does not provide strong API stability guarantees yet.
-> This repo targets **DepthAI-Core v3.1.0+** (supported tags: **v3.1.0 to v3.10.0**; default: **`latest` = v3.10.0**).
+> This repo targets **DepthAI-Core v3.1.0+** (supported tags: **v3.1.0 to v3.12.0**; default: **`latest` = v3.12.0**).
 
 ## What’s in this repo
 
@@ -136,6 +136,8 @@ cargo run --example camera
 cargo run --example host_node
 cargo run --example imu
 cargo run --example open_by_address -- <ip address or device id>
+cargo run --example calibration
+cargo run --example depth_align
 
 # Examples requiring the optional `rerun` feature
 cargo run --features rerun --example rgbd_rerun
@@ -158,6 +160,7 @@ This table reflects what the Rust crates in this repo currently wrap and demonst
 |                             |           |                                                           |
 | `Multi-Device Pipeline`     |    🟡     |                                                           |
 | `Device by address`         |    🟢     | `DeviceInfo::from_id_or_name`, `examples/open_by_address.rs` |
+| `CalibrationHandler`        |    🟢     | `Device::read_calibration`, `examples/calibration.rs`, `src/calibration.rs` |
 | `Camera`                    |    🟢     | `examples/camera.rs`                                      |
 | `DetectionNetwork`          |    🟢     | Core v3.8.0+; `examples/detection_network_node.rs`        |
 | `DynamicCalibration`        |    🔴     |                                                           |
@@ -165,7 +168,7 @@ This table reflects what the Rust crates in this repo currently wrap and demonst
 | `FeatureTracker`            |    🔴     |                                                           |
 | `HostNodes`                 |    🟢     | `examples/host_node.rs`, `examples/threaded_host_node.rs` |
 | `IMU`                       |    🟢     | `examples/imu.rs`, `src/imu.rs`                           |
-| `ImageAlign`                |    🟢     | `examples/rgbd_rerun.rs`, `src/image_align.rs`            |
+| `ImageAlign`                |    🟢     | `examples/rgbd_rerun.rs`, `src/image_align.rs` (depth to a stereo camera: `StereoDepthNode::set_depth_align`) |
 | `ImageManip`                |    🟢     | `examples/image_manip.rs`, `src/image_manip.rs`           |
 | `Misc/AutoReconnect`        |    🔴     |                                                           |
 | `Misc/Projectors`           |    🟡     | `Device::set_ir_laser_dot_projector_intensity`            |
@@ -185,7 +188,7 @@ This table reflects what the Rust crates in this repo currently wrap and demonst
 | `Script`                    |    🔴     |                                                           |
 | `SpatialDetectionNetwork`   |    🔴     |                                                           |
 | `SpatialLocationCalculator` |    🔴     |                                                           |
-| `StereoDepth`               |    🟢     | `examples/rgbd_rerun.rs`, `src/stereo_depth.rs`           |
+| `StereoDepth`               |    🟢     | `StereoDepthNode::set_depth_align`, `examples/depth_align.rs`, `examples/rgbd_rerun.rs`, `src/stereo_depth.rs` |
 | `Sync`                      |    🔴     |                                                           |
 | `VideoEncoder`              |    🟢     | `examples/video_encoder.rs`, `src/video_encoder.rs`       |
 | `Visualizer`                |    🔴     |                                                           |

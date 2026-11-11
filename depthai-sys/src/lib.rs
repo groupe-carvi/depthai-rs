@@ -26,8 +26,23 @@ include_cpp! {
 
     // Device functions
     generate!("dai::dai_device_new")
-    generate!("dai::dai_device_new_with_device_id")
-    generate!("dai::dai_get_connected_device_ids")
+    generate!("dai::dai_device_info_new")
+    generate!("dai::dai_device_info_delete")
+    generate!("dai::dai_device_info_get_device_id")
+    generate!("dai::dai_device_info_get_name")
+    generate!("dai::dai_device_info_get_metadata")
+    generate!("dai::dai_device_info_array_new")
+    generate!("dai::dai_device_info_array_len")
+    generate!("dai::dai_device_info_array_get")
+    generate!("dai::dai_device_info_array_delete")
+    generate!("dai::dai_device_get_all_available")
+    generate!("dai::dai_device_get_all_connected")
+    generate!("dai::dai_device_get_first_available")
+    generate!("dai::dai_device_find_by_id")
+    generate!("dai::dai_device_open")
+    generate!("dai::dai_device_get_info")
+    generate!("dai::dai_pipeline_create_node_on")
+    generate!("dai::dai_node_get_device")
     generate!("dai::dai_device_clone")
     generate!("dai::dai_device_delete")
     generate!("dai::dai_device_is_closed")
@@ -545,6 +560,8 @@ include_cpp! {
 
 // Define our own opaque handle types for type safety
 // These are just wrappers around void* but provide type distinction
+pub type DaiDeviceInfo = *mut autocxx::c_void;
+pub type DaiDeviceInfoArray = *mut autocxx::c_void;
 pub type DaiDevice = *mut autocxx::c_void;
 pub type DaiPipeline = *mut autocxx::c_void;
 pub type DaiNode = *mut autocxx::c_void;

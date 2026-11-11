@@ -1,18 +1,18 @@
-use std::sync::Arc;
 use std::ffi::CString;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use autocxx::c_int;
-use depthai_sys::{depthai, DaiCameraNode, DaiDataQueue, DaiImgFrame, DaiNode};
+use depthai_sys::{DaiCameraNode, DaiDataQueue, DaiImgFrame, DaiNode, depthai};
 
 pub use crate::common::{
     CameraBoardSocket, CameraExposureOffset, CameraImageOrientation, CameraSensorType,
     ImageFrameType, ResizeMode,
 };
 use crate::error::{DepthaiError, Result, clear_error_flag, last_error, take_error_if_any};
+use crate::output::Output as NodeOutput;
 use crate::pipeline::device_node::CreateInPipelineWith;
 use crate::pipeline::{Pipeline, PipelineInner};
-use crate::output::Output as NodeOutput;
 use crate::timestamp::{
     DeviceTimestamp, HostTimestamp, read_monotonic_timestamp, read_system_timestamp,
     write_monotonic_timestamp, write_system_timestamp,
@@ -196,8 +196,8 @@ fn validate_finite_fps(value: &CapabilityConstraint<f32>) -> Result<()> {
 
 impl CameraNode {
     pub(crate) fn from_handle(pipeline: Arc<PipelineInner>, handle: DaiCameraNode) -> Self {
-        Self { 
-            node: crate::pipeline::Node::from_handle(pipeline, handle as DaiNode)
+        Self {
+            node: crate::pipeline::Node::from_handle(pipeline, handle as DaiNode),
         }
     }
 
@@ -224,7 +224,10 @@ impl CameraNode {
         if handle.is_null() {
             Err(last_error("failed to request camera output"))
         } else {
-            Ok(NodeOutput::from_handle(std::sync::Arc::clone(&self.node.pipeline), handle))
+            Ok(NodeOutput::from_handle(
+                std::sync::Arc::clone(&self.node.pipeline),
+                handle,
+            ))
         }
     }
 
@@ -232,7 +235,10 @@ impl CameraNode {
         self.request_full_resolution_output_with(CameraFullResolutionConfig::default())
     }
 
-    pub fn request_full_resolution_output_with(&self, config: CameraFullResolutionConfig) -> Result<CameraOutput> {
+    pub fn request_full_resolution_output_with(
+        &self,
+        config: CameraFullResolutionConfig,
+    ) -> Result<CameraOutput> {
         clear_error_flag();
         let fmt = config.frame_type.map(|t| t as i32).unwrap_or(-1);
         let fps = config.fps.unwrap_or(-1.0);
@@ -247,7 +253,10 @@ impl CameraNode {
         if handle.is_null() {
             Err(last_error("failed to request full resolution output"))
         } else {
-            Ok(NodeOutput::from_handle(std::sync::Arc::clone(&self.node.pipeline), handle))
+            Ok(NodeOutput::from_handle(
+                std::sync::Arc::clone(&self.node.pipeline),
+                handle,
+            ))
         }
     }
 
@@ -280,7 +289,8 @@ impl CameraNode {
 
     pub fn board_socket(&self) -> Result<CameraBoardSocket> {
         clear_error_flag();
-        let raw = unsafe { depthai::dai_camera_get_board_socket(self.node.handle() as DaiCameraNode) };
+        let raw =
+            unsafe { depthai::dai_camera_get_board_socket(self.node.handle() as DaiCameraNode) };
         if let Some(err) = take_error_if_any("failed to get camera board socket") {
             return Err(err);
         }
@@ -321,7 +331,8 @@ impl CameraNode {
 
     pub fn sensor_type(&self) -> Result<CameraSensorType> {
         clear_error_flag();
-        let raw = unsafe { depthai::dai_camera_get_sensor_type(self.node.handle() as DaiCameraNode) };
+        let raw =
+            unsafe { depthai::dai_camera_get_sensor_type(self.node.handle() as DaiCameraNode) };
         if let Some(err) = take_error_if_any("failed to get camera sensor type") {
             return Err(err);
         }
@@ -330,7 +341,12 @@ impl CameraNode {
 
     pub fn set_raw_num_frames_pool(&self, num: i32) -> Result<()> {
         clear_error_flag();
-        unsafe { depthai::dai_camera_set_raw_num_frames_pool(self.node.handle() as DaiCameraNode, c_int(num)) };
+        unsafe {
+            depthai::dai_camera_set_raw_num_frames_pool(
+                self.node.handle() as DaiCameraNode,
+                c_int(num),
+            )
+        };
         if let Some(err) = take_error_if_any("failed to set raw num frames pool") {
             return Err(err);
         }
@@ -339,7 +355,12 @@ impl CameraNode {
 
     pub fn set_max_size_pool_raw(&self, size: i32) -> Result<()> {
         clear_error_flag();
-        unsafe { depthai::dai_camera_set_max_size_pool_raw(self.node.handle() as DaiCameraNode, c_int(size)) };
+        unsafe {
+            depthai::dai_camera_set_max_size_pool_raw(
+                self.node.handle() as DaiCameraNode,
+                c_int(size),
+            )
+        };
         if let Some(err) = take_error_if_any("failed to set raw max size pool") {
             return Err(err);
         }
@@ -348,7 +369,12 @@ impl CameraNode {
 
     pub fn set_isp_num_frames_pool(&self, num: i32) -> Result<()> {
         clear_error_flag();
-        unsafe { depthai::dai_camera_set_isp_num_frames_pool(self.node.handle() as DaiCameraNode, c_int(num)) };
+        unsafe {
+            depthai::dai_camera_set_isp_num_frames_pool(
+                self.node.handle() as DaiCameraNode,
+                c_int(num),
+            )
+        };
         if let Some(err) = take_error_if_any("failed to set isp num frames pool") {
             return Err(err);
         }
@@ -357,7 +383,12 @@ impl CameraNode {
 
     pub fn set_max_size_pool_isp(&self, size: i32) -> Result<()> {
         clear_error_flag();
-        unsafe { depthai::dai_camera_set_max_size_pool_isp(self.node.handle() as DaiCameraNode, c_int(size)) };
+        unsafe {
+            depthai::dai_camera_set_max_size_pool_isp(
+                self.node.handle() as DaiCameraNode,
+                c_int(size),
+            )
+        };
         if let Some(err) = take_error_if_any("failed to set isp max size pool") {
             return Err(err);
         }
@@ -398,7 +429,12 @@ impl CameraNode {
 
     pub fn set_outputs_num_frames_pool(&self, num: i32) -> Result<()> {
         clear_error_flag();
-        unsafe { depthai::dai_camera_set_outputs_num_frames_pool(self.node.handle() as DaiCameraNode, c_int(num)) };
+        unsafe {
+            depthai::dai_camera_set_outputs_num_frames_pool(
+                self.node.handle() as DaiCameraNode,
+                c_int(num),
+            )
+        };
         if let Some(err) = take_error_if_any("failed to set outputs num frames pool") {
             return Err(err);
         }
@@ -407,7 +443,12 @@ impl CameraNode {
 
     pub fn set_outputs_max_size_pool(&self, size: i32) -> Result<()> {
         clear_error_flag();
-        unsafe { depthai::dai_camera_set_outputs_max_size_pool(self.node.handle() as DaiCameraNode, c_int(size)) };
+        unsafe {
+            depthai::dai_camera_set_outputs_max_size_pool(
+                self.node.handle() as DaiCameraNode,
+                c_int(size),
+            )
+        };
         if let Some(err) = take_error_if_any("failed to set outputs max size pool") {
             return Err(err);
         }
@@ -428,15 +469,15 @@ impl CameraNode {
         clear_error_flag();
         let fps_val = fps.unwrap_or(-1.0);
         let handle = unsafe {
-            depthai::dai_camera_request_isp_output(
-                self.node.handle() as DaiCameraNode,
-                fps_val,
-            )
+            depthai::dai_camera_request_isp_output(self.node.handle() as DaiCameraNode, fps_val)
         };
         if handle.is_null() {
             Err(last_error("failed to request ISP output"))
         } else {
-            Ok(NodeOutput::from_handle(std::sync::Arc::clone(&self.node.pipeline), handle))
+            Ok(NodeOutput::from_handle(
+                std::sync::Arc::clone(&self.node.pipeline),
+                handle,
+            ))
         }
     }
 
@@ -464,7 +505,8 @@ impl CameraNode {
         clear_error_flag();
         let raw: i32 = unsafe {
             depthai::dai_camera_get_image_orientation(self.node.handle() as DaiCameraNode)
-        }.into();
+        }
+        .into();
         if let Some(err) = take_error_if_any("failed to get camera image orientation") {
             return Err(err);
         }
@@ -473,7 +515,9 @@ impl CameraNode {
 
     pub fn raw_num_frames_pool(&self) -> Result<i32> {
         clear_error_flag();
-        let v = unsafe { depthai::dai_camera_get_raw_num_frames_pool(self.node.handle() as DaiCameraNode) };
+        let v = unsafe {
+            depthai::dai_camera_get_raw_num_frames_pool(self.node.handle() as DaiCameraNode)
+        };
         if let Some(err) = take_error_if_any("failed to get raw num frames pool") {
             return Err(err);
         }
@@ -482,7 +526,9 @@ impl CameraNode {
 
     pub fn max_size_pool_raw(&self) -> Result<i32> {
         clear_error_flag();
-        let v = unsafe { depthai::dai_camera_get_max_size_pool_raw(self.node.handle() as DaiCameraNode) };
+        let v = unsafe {
+            depthai::dai_camera_get_max_size_pool_raw(self.node.handle() as DaiCameraNode)
+        };
         if let Some(err) = take_error_if_any("failed to get raw max size pool") {
             return Err(err);
         }
@@ -491,7 +537,9 @@ impl CameraNode {
 
     pub fn isp_num_frames_pool(&self) -> Result<i32> {
         clear_error_flag();
-        let v = unsafe { depthai::dai_camera_get_isp_num_frames_pool(self.node.handle() as DaiCameraNode) };
+        let v = unsafe {
+            depthai::dai_camera_get_isp_num_frames_pool(self.node.handle() as DaiCameraNode)
+        };
         if let Some(err) = take_error_if_any("failed to get isp num frames pool") {
             return Err(err);
         }
@@ -500,7 +548,9 @@ impl CameraNode {
 
     pub fn max_size_pool_isp(&self) -> Result<i32> {
         clear_error_flag();
-        let v = unsafe { depthai::dai_camera_get_max_size_pool_isp(self.node.handle() as DaiCameraNode) };
+        let v = unsafe {
+            depthai::dai_camera_get_max_size_pool_isp(self.node.handle() as DaiCameraNode)
+        };
         if let Some(err) = take_error_if_any("failed to get isp max size pool") {
             return Err(err);
         }
@@ -812,12 +862,14 @@ impl ImageFrame {
     }
 
     pub fn width(&self) -> u32 {
-        let raw: ::std::os::raw::c_int = unsafe { depthai::dai_frame_get_width(self.handle) }.into();
+        let raw: ::std::os::raw::c_int =
+            unsafe { depthai::dai_frame_get_width(self.handle) }.into();
         raw as u32
     }
 
     pub fn height(&self) -> u32 {
-        let raw: ::std::os::raw::c_int = unsafe { depthai::dai_frame_get_height(self.handle) }.into();
+        let raw: ::std::os::raw::c_int =
+            unsafe { depthai::dai_frame_get_height(self.handle) }.into();
         raw as u32
     }
 
@@ -848,6 +900,18 @@ impl ImageFrame {
 impl CreateInPipelineWith<CameraBoardSocket> for CameraNode {
     fn create_with(pipeline: &Pipeline, socket: CameraBoardSocket) -> Result<Self> {
         pipeline.create_camera(socket)
+    }
+    fn create_with_on(
+        pipeline: &Pipeline,
+        device: &crate::Device,
+        socket: CameraBoardSocket,
+    ) -> Result<Self> {
+        let camera = pipeline.create_on::<Self>(device)?;
+        camera.build(CameraBuildConfig {
+            board_socket: socket,
+            ..CameraBuildConfig::default()
+        })?;
+        Ok(camera)
     }
 }
 

@@ -13,8 +13,14 @@ concurrency:
 
 jobs:
   build-test:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    name: ${{ matrix.os }} / DepthAI-Core ${{ matrix.sdk }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+        sdk: [v3-1-0, v3-4-0, v3-8-0, v3-10-0]
 
     env:
       DEPTHAI_RS_CACHE_DIR: ${{ github.workspace }}/.depthai-cache
@@ -26,10 +32,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            clang libclang-dev \
+            clang-18 libclang-18-dev \
             cmake ninja-build pkg-config \
             python3 \
             autoconf automake autoconf-archive libtool \
@@ -41,6 +48,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Fingerprint native toolchain
+        if: runner.os == 'Linux'
         id: native-toolchain
         shell: bash
         run: |
@@ -49,7 +57,7 @@ jobs:
               cat /etc/os-release
               gcc --version
               g++ --version
-              clang --version
+              clang-18 --version
               cmake --version
               ninja --version
               dpkg-query -W libc6-dev libudev-dev libssl-dev libdw-dev libelf-dev
@@ -58,14 +66,16 @@ jobs:
           echo "fingerprint=${fingerprint}" >> "$GITHUB_OUTPUT"
 
       - name: Cache compiled DepthAI-Core
+        if: runner.os == 'Linux'
         uses: actions/cache@v4
         with:
           # Keep headers, generated files and transitive libraries with the core library.
           # Exact matches only: build.rs reuses native libraries without rebuilding them.
           path: ${{ env.DEPTHAI_RS_CACHE_DIR }}
-          key: depthai-core-v1-ubuntu-24.04-${{ runner.arch }}-${{ steps.native-toolchain.outputs.fingerprint }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'depthai-sys/Cargo.toml', 'depthai-sys/build.rs', 'depthai-sys/src/cache_layout.rs', '.github/workflows/ci.yml') }}
+          key: depthai-core-v2-${{ matrix.os }}-${{ matrix.sdk }}-${{ runner.arch }}-${{ steps.native-toolchain.outputs.fingerprint }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'depthai-sys/Cargo.toml', 'depthai-sys/build.rs', 'depthai-sys/src/cache_layout.rs', '.github/workflows/ci.yml') }}
 
       - name: Prepare vcpkg cache directories
+        shell: bash
         run: |
           mkdir -p "${VCPKG_DOWNLOADS}" "${VCPKG_DEFAULT_BINARY_CACHE}"
 
@@ -84,16 +94,32 @@ jobs:
         with:
           # Native outputs outside target/ are cached separately above.
           cache-on-failure: true
+          shared-key: ${{ matrix.sdk }}
+
+      - name: Configure Linux clang
+        if: runner.os == 'Linux'
+        run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
+
+      - name: Configure Windows clang
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: '"LIBCLANG_PATH=C:/Program Files/LLVM/bin" | Out-File -FilePath $env:GITHUB_ENV -Append'
 
       - name: Build (workspace)
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: 80
           max_attempts: 2
-          command: cargo build --workspace --all-targets --locked
+          command: cargo check --workspace --all-targets --locked --features ${{ matrix.sdk }}
 
       - name: Test (workspace)
-        run: cargo test --workspace --all-targets --locked
+        run: cargo test --workspace --all-targets --locked --features ${{ matrix.sdk }}
+
+      - name: Compile hardware qualification tests (no hardware on CI)
+        run: cargo test --features hit,${{ matrix.sdk }} --no-run --locked
+
+      - name: Build documentation for both crates
+        run: cargo doc -p depthai -p depthai-sys --no-deps --locked --features ${{ matrix.sdk }}
 
   doc:
     name: Documentation (docs.rs)

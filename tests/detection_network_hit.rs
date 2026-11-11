@@ -142,7 +142,15 @@ fn required_archive_path() -> TestResult<PathBuf> {
 
 fn open_test_device() -> TestResult<Device> {
     match env::var("DAI_TEST_DEVICE_ID") {
-        Ok(device_id) => Ok(Device::new_with_device_id(&device_id)?),
+        Ok(device_id) => {
+            let info = Device::find_by_id(&device_id)?.ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("test device {device_id} is unavailable"),
+                )
+            })?;
+            Ok(Device::open(&info)?)
+        }
         Err(env::VarError::NotPresent) => Ok(Device::new()?),
         Err(error) => Err(io::Error::new(
             io::ErrorKind::InvalidInput,

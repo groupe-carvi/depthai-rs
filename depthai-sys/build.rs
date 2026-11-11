@@ -233,18 +233,18 @@ impl DepthaiCoreVersion {
             DepthaiCoreVersion::Latest => {
                 LATEST_SUPPORTED_DEPTHAI_CORE_TAG.windows_opencv_runtime()
             }
-            // depthai-core v3.6.1 through v3.10.0 were compiled against OpenCV 4.13.0.
+            // v3.4.0 and v3.6.1 through v3.10.0 import OpenCV 4.13.0.
             DepthaiCoreVersion::V3_10_0
             | DepthaiCoreVersion::V3_9_0
             | DepthaiCoreVersion::V3_8_0
             | DepthaiCoreVersion::V3_7_1
-            | DepthaiCoreVersion::V3_6_1 => WindowsOpenCvRuntime {
+            | DepthaiCoreVersion::V3_6_1
+            | DepthaiCoreVersion::V3_4_0 => WindowsOpenCvRuntime {
                 opencv_version: "4.13.0",
                 world_dll: "opencv_world4130.dll",
             },
-            // All older supported tags were compiled against OpenCV 4.11.0.
+            // Remaining supported tags use OpenCV 4.11.0.
             DepthaiCoreVersion::V3_5_0
-            | DepthaiCoreVersion::V3_4_0
             | DepthaiCoreVersion::V3_3_0
             | DepthaiCoreVersion::V3_2_1
             | DepthaiCoreVersion::V3_2_0
@@ -506,9 +506,9 @@ fn main() {
         }
     };
     let out_dir = env::var("OUT_DIR").unwrap();
-    // OUT_DIR is `<profile>/build/<package-hash>/out`; stage runtime files next to
-    // Cargo's executables in `<profile>`, including with a custom CARGO_TARGET_DIR.
-    let target_dir = Path::new(&out_dir).ancestors().nth(4).unwrap();
+    // Locate the profile directory across Cargo OUT_DIR layouts, including with
+    // a custom CARGO_TARGET_DIR, to stage runtime files next to executables.
+    let target_dir = cache_layout::cargo_profile_dir(Path::new(&out_dir));
     let deps_dir = target_dir.join("deps");
     let examples_dir = target_dir.join("examples");
 
@@ -601,6 +601,10 @@ fn main() {
             );
         } else {
             println_build!("Copying runtime DLLs from {}", bin_path.display());
+
+            for dest_dir in [target_dir, deps_dir.as_path(), examples_dir.as_path()] {
+                fs::create_dir_all(dest_dir).expect("Failed to create runtime DLL directory");
+            }
 
             let entries = fs::read_dir(&bin_path).expect("Failed to read depthai-core/bin");
             for entry in entries {
@@ -1849,7 +1853,7 @@ fn resolve_depthai_core_lib() -> Result<PathBuf, &'static str> {
         .expect("Failed to acquire the DepthAI-Core cache lock");
     let prefer_static = !env_bool("DEPTHAI_SYS_LINK_SHARED").unwrap_or(false);
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    let target_dir = Path::new(&out_dir).ancestors().nth(3).unwrap();
+    let target_dir = cache_layout::cargo_profile_dir(&out_dir);
     let deps_dir = Path::new(&target_dir).join("deps");
 
     if target_os_is("windows") {
@@ -2121,7 +2125,7 @@ fn depthai_core_headers_present() -> bool {
 fn probe_depthai_core_lib(out: PathBuf, prefer_static: bool) -> Option<PathBuf> {
     println_build!("Probing for depthai-core library...");
     let out_dir = env::var("OUT_DIR").unwrap();
-    let target_dir = Path::new(&out_dir).ancestors().nth(3).unwrap();
+    let target_dir = cache_layout::cargo_profile_dir(Path::new(&out_dir));
     let deps_dir = Path::new(&target_dir).join("deps");
 
     let lib_path = if target_os_is("windows") {

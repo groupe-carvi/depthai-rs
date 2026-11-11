@@ -1,8 +1,8 @@
 use proc_macro::TokenStream;
-use quote::{quote, ToTokens};
-use syn::{parse::Parse, parse::ParseStream, parse_macro_input, Ident, ItemStruct, Result, Token};
+use quote::{ToTokens, quote};
+use syn::{Ident, ItemStruct, Result, Token, parse::Parse, parse::ParseStream, parse_macro_input};
 
-/// Wrap a native DepthAI node that is created via `Pipeline::create_node_by_name("ClassName")`.
+/// Wrap a native DepthAI node that is created via `Pipeline::create_node("ClassName")`.
 ///
 /// Minimal usage:
 ///
@@ -50,7 +50,7 @@ impl Parse for NativeNodeArgs {
 
         while !input.is_empty() {
             let key: Ident = input.parse()?;
-            
+
             if input.peek(Token![=]) {
                 input.parse::<Token![=]>()?;
                 if key == "native" {
@@ -61,7 +61,10 @@ impl Parse for NativeNodeArgs {
                     let v: syn::LitBool = input.parse()?;
                     gen_as_node = Some(v.value);
                 } else {
-                    return Err(syn::Error::new_spanned(key, "unknown argument; expected `native`, `field`, or `as_node`"));
+                    return Err(syn::Error::new_spanned(
+                        key,
+                        "unknown argument; expected `native`, `field`, or `as_node`",
+                    ));
                 }
             } else if input.peek(syn::token::Paren) {
                 let content;
@@ -73,7 +76,10 @@ impl Parse for NativeNodeArgs {
                     } else if key == "outputs" {
                         outputs.push(id);
                     } else {
-                        return Err(syn::Error::new_spanned(key, "unknown argument; expected `inputs` or `outputs`"));
+                        return Err(syn::Error::new_spanned(
+                            key,
+                            "unknown argument; expected `inputs` or `outputs`",
+                        ));
                     }
                     if content.peek(Token![,]) {
                         content.parse::<Token![,]>()?;
@@ -88,7 +94,8 @@ impl Parse for NativeNodeArgs {
             }
         }
 
-        let native = native.ok_or_else(|| syn::Error::new(input.span(), "missing required argument: `native`"))?;
+        let native = native
+            .ok_or_else(|| syn::Error::new(input.span(), "missing required argument: `native`"))?;
 
         Ok(Self {
             native,
@@ -123,9 +130,9 @@ fn expand_native_node(args: NativeNodeArgs, item_struct: ItemStruct) -> Result<T
 
     let ty_ident = item_struct.ident.clone();
     let native_name = args.native;
-    
-    let create_expr = quote! { 
-        ::depthai::pipeline::node::create_node_by_name(pipeline.inner_arc(), #native_name)? 
+
+    let create_expr = quote! {
+        pipeline.create_node(#native_name)?
     };
 
     let gen_as_node = args.gen_as_node;
@@ -182,6 +189,10 @@ fn expand_native_node(args: NativeNodeArgs, item_struct: ItemStruct) -> Result<T
                 let node = #create_expr;
                 Ok(Self { #field_ident: node })
             }
+            fn create_in_pipeline_on(pipeline: &::depthai::pipeline::Pipeline, device: &::depthai::Device) -> ::depthai::Result<Self> {
+                let node = pipeline.create_node_on(#native_name, device)?;
+                Ok(Self { #field_ident: node })
+            }
         }
     };
 
@@ -189,10 +200,10 @@ fn expand_native_node(args: NativeNodeArgs, item_struct: ItemStruct) -> Result<T
 }
 
 /// Attribute macro for defining composite nodes in Rust.
-/// 
+///
 /// A composite node is a Rust struct that wraps one or more native nodes
 /// and provides a higher-level API.
-/// 
+///
 /// This macro implements `crate::pipeline::device_node::CreateInPipeline`
 /// by calling `Self::new(pipeline)`.
 #[proc_macro_attribute]

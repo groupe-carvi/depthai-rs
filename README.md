@@ -135,6 +135,7 @@ cargo run --example pipeline_creation
 cargo run --example camera
 cargo run --example host_node
 cargo run --example imu
+cargo run --example open_by_address -- <ip address or device id>
 
 # Examples requiring the optional `rerun` feature
 cargo run --features rerun --example rgbd_rerun
@@ -156,6 +157,7 @@ This table reflects what the Rust crates in this repo currently wrap and demonst
 | `Benchmark`                 |    🔴     |                                                           |
 |                             |           |                                                           |
 | `Multi-Device Pipeline`     |    🟡     |                                                           |
+| `Device by address`         |    🟢     | `DeviceInfo::from_id_or_name`, `examples/open_by_address.rs` |
 | `Camera`                    |    🟢     | `examples/camera.rs`                                      |
 | `DetectionNetwork`          |    🟢     | Core v3.8.0+; `examples/detection_network_node.rs`        |
 | `DynamicCalibration`        |    🔴     |                                                           |

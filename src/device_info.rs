@@ -45,6 +45,24 @@ impl std::fmt::Debug for DeviceInfo {
     }
 }
 impl DeviceInfo {
+    /// Describe a device by a device id, an IP address or a USB port name, without discovering
+    /// anything: the native call decides which of the three it is. Opening it with `Device::open`
+    /// connects to that address directly, so a camera on another subnet, where discovery does not
+    /// reach, can still be opened.
+    ///
+    /// Mirrors C++: `DeviceInfo(deviceIdOrName)`.
+    pub fn from_id_or_name(id_or_name: &str) -> Result<Self> {
+        let c_name = std::ffi::CString::new(id_or_name)
+            .map_err(|_| crate::error::DepthaiError::new("the device id or name contains a NUL byte"))?;
+        crate::error::clear_error_flag();
+        let handle = unsafe { depthai::dai_device_info_new(c_name.as_ptr()) };
+        if handle.is_null() {
+            Err(crate::error::last_error("failed to describe the device"))
+        } else {
+            Self::from_handle(handle)
+        }
+    }
+
     /// Native device identifier, without MXID-specific terminology.
     pub fn device_id(&self) -> &str {
         &self.inner.metadata.device_id

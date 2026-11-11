@@ -134,6 +134,8 @@ To build docs locally like docs.rs:
 cargo run --example pipeline_creation
 cargo run --example camera
 cargo run --example host_node
+cargo run --example imu
+cargo run --example open_by_address -- <ip address or device id>
 cargo run --example calibration
 cargo run --example depth_align
 
@@ -157,6 +159,7 @@ This table reflects what the Rust crates in this repo currently wrap and demonst
 | `Benchmark`                 |    🔴     |                                                           |
 |                             |           |                                                           |
 | `Multi-Device Pipeline`     |    🟡     |                                                           |
+| `Device by address`         |    🟢     | `DeviceInfo::from_id_or_name`, `examples/open_by_address.rs` |
 | `CalibrationHandler`        |    🟢     | `Device::read_calibration`, `examples/calibration.rs`, `src/calibration.rs` |
 | `Camera`                    |    🟢     | `examples/camera.rs`                                      |
 | `DetectionNetwork`          |    🟢     | Core v3.8.0+; `examples/detection_network_node.rs`        |
@@ -164,7 +167,7 @@ This table reflects what the Rust crates in this repo currently wrap and demonst
 | `Events`                    |    🔴     |                                                           |
 | `FeatureTracker`            |    🔴     |                                                           |
 | `HostNodes`                 |    🟢     | `examples/host_node.rs`, `examples/threaded_host_node.rs` |
-| `IMU`                       |    🔴     |                                                           |
+| `IMU`                       |    🟢     | `examples/imu.rs`, `src/imu.rs`                           |
 | `ImageAlign`                |    🟢     | `examples/rgbd_rerun.rs`, `src/image_align.rs` (depth to a stereo camera: `StereoDepthNode::set_depth_align`) |
 | `ImageManip`                |    🟢     | `examples/image_manip.rs`, `src/image_manip.rs`           |
 | `Misc/AutoReconnect`        |    🔴     |                                                           |

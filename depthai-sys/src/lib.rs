@@ -452,6 +452,14 @@ include_cpp! {
     generate!("dai::dai_encoded_frame_set_sequence_num")
     generate!("dai::dai_encoded_frame_release")
 
+    // IMU
+    generate!("dai::dai_imu_enable_sensor")
+    generate!("dai::dai_imu_set_batch_report_threshold")
+    generate!("dai::dai_imu_set_max_batch_reports")
+    generate!("dai::dai_datatype_as_imu_data")
+    generate!("dai::dai_imu_data_release")
+    generate!("dai::dai_imu_data_packet_count")
+    generate!("dai::dai_imu_data_get_packet")
     // Calibration
     generate!("dai::dai_device_read_calibration")
     generate!("dai::dai_calibration_release")
@@ -582,6 +590,7 @@ pub type DaiDataQueue = *mut autocxx::c_void;
 pub type DaiDatatype = *mut autocxx::c_void;
 pub type DaiImgFrame = *mut autocxx::c_void;
 pub type DaiEncodedFrame = *mut autocxx::c_void;
+pub type DaiImuData = *mut autocxx::c_void;
 pub type DaiCalibration = *mut autocxx::c_void;
 pub type DaiPointCloud = *mut autocxx::c_void;
 pub type DaiRGBDData = *mut autocxx::c_void;

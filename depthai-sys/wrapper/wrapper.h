@@ -949,6 +949,23 @@ API void dai_clear_last_error();
 
 #ifdef __cplusplus
 
+// --- IMU -------------------------------------
+
+// IMU node configuration. `sensor` is a `dai::IMUSensor` value, `report_rate` is in Hz.
+API void dai_imu_enable_sensor(DaiNode imu, int sensor, int report_rate);
+API void dai_imu_set_batch_report_threshold(DaiNode imu, int threshold);
+API void dai_imu_set_max_batch_reports(DaiNode imu, int max_reports);
+
+// IMU data (`std::shared_ptr<dai::IMUData>*`).
+typedef void *DaiImuData;
+API DaiImuData dai_datatype_as_imu_data(DaiDatatype msg);
+API void dai_imu_data_release(DaiImuData data);
+API int dai_imu_data_packet_count(DaiImuData data);
+// One packet's accelerometer and gyroscope. `values` has 6 doubles (ax, ay, az, gx, gy, gz);
+// `ints` has 6 integers (accelerometer device ns, accelerometer host ns, accelerometer sequence,
+// gyroscope device ns, gyroscope host ns, gyroscope sequence). Device time is the device's monotonic
+// clock; host time is that clock synced to this computer's steady clock.
+API bool dai_imu_data_get_packet(DaiImuData data, int index, double *values, int64_t *ints);
 // --- Depth alignment and calibration -------------------------------------
 
 // Align the depth output to a camera socket (`dai::CameraBoardSocket` as an int).

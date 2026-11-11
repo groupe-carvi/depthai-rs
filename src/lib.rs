@@ -512,6 +512,7 @@ pub mod gate;
 pub mod host_node;
 pub mod image_align;
 pub mod image_manip;
+pub mod imu;
 pub mod model_zoo;
 pub mod neural_network;
 pub mod nn_archive;
@@ -549,6 +550,7 @@ pub use image_manip::{
     Backend as ImageManipBackend, Colormap, ImageManipConfig, ImageManipNode, ImageManipResizeMode,
     PerformanceMode as ImageManipPerformanceMode,
 };
+pub use imu::{ImuData, ImuNode, ImuPacket, ImuReportTime, ImuSensor};
 pub use model_zoo::{
     NNModelDescription, ProgressFormat, SlugComponents, ZooFetchOptions, download_models_from_zoo,
     get_model_from_zoo,

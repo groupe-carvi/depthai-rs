@@ -9898,4 +9898,116 @@ bool dai_calibration_get_extrinsics(DaiCalibration calibration, int source_socke
 }
 
 
+// --- IMU -------------------------------------
+
+static inline dai::node::IMU* _dai_as_imu(DaiNode imu) {
+    return static_cast<dai::node::IMU*>(imu);
+}
+
+void dai_imu_enable_sensor(DaiNode imu, int sensor, int report_rate) {
+    if(!imu) {
+        last_error = "dai_imu_enable_sensor: null imu";
+        return;
+    }
+    try {
+        _dai_as_imu(imu)->enableIMUSensor(static_cast<dai::IMUSensor>(sensor), static_cast<uint32_t>(report_rate));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_imu_enable_sensor failed: ") + e.what();
+    }
+}
+
+void dai_imu_set_batch_report_threshold(DaiNode imu, int threshold) {
+    if(!imu) {
+        last_error = "dai_imu_set_batch_report_threshold: null imu";
+        return;
+    }
+    try {
+        _dai_as_imu(imu)->setBatchReportThreshold(threshold);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_imu_set_batch_report_threshold failed: ") + e.what();
+    }
+}
+
+void dai_imu_set_max_batch_reports(DaiNode imu, int max_reports) {
+    if(!imu) {
+        last_error = "dai_imu_set_max_batch_reports: null imu";
+        return;
+    }
+    try {
+        _dai_as_imu(imu)->setMaxBatchReports(max_reports);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_imu_set_max_batch_reports failed: ") + e.what();
+    }
+}
+
+DaiImuData dai_datatype_as_imu_data(DaiDatatype msg) {
+    if(!msg) {
+        last_error = "dai_datatype_as_imu_data: null msg";
+        return nullptr;
+    }
+    try {
+        auto ptr = static_cast<std::shared_ptr<dai::ADatatype>*>(msg);
+        auto data = std::dynamic_pointer_cast<dai::IMUData>(*ptr);
+        if(!data) return nullptr;
+        return new std::shared_ptr<dai::IMUData>(std::move(data));
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_datatype_as_imu_data failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+void dai_imu_data_release(DaiImuData data) {
+    if(data) {
+        delete static_cast<std::shared_ptr<dai::IMUData>*>(data);
+    }
+}
+
+int dai_imu_data_packet_count(DaiImuData data) {
+    if(!data) {
+        last_error = "dai_imu_data_packet_count: null data";
+        return -1;
+    }
+    try {
+        return static_cast<int>((*static_cast<std::shared_ptr<dai::IMUData>*>(data))->packets.size());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_imu_data_packet_count failed: ") + e.what();
+        return -1;
+    }
+}
+
+static inline int64_t _dai_timestamp_ns(const dai::Timestamp& ts) {
+    return ts.sec * 1000000000LL + ts.nsec;
+}
+
+bool dai_imu_data_get_packet(DaiImuData data, int index, double* values, int64_t* ints) {
+    if(!data || !values || !ints) {
+        last_error = "dai_imu_data_get_packet: null argument";
+        return false;
+    }
+    try {
+        auto& packets = (*static_cast<std::shared_ptr<dai::IMUData>*>(data))->packets;
+        if(index < 0 || static_cast<size_t>(index) >= packets.size()) {
+            last_error = "dai_imu_data_get_packet: index out of range";
+            return false;
+        }
+        const auto& packet = packets[static_cast<size_t>(index)];
+        values[0] = packet.acceleroMeter.x;
+        values[1] = packet.acceleroMeter.y;
+        values[2] = packet.acceleroMeter.z;
+        values[3] = packet.gyroscope.x;
+        values[4] = packet.gyroscope.y;
+        values[5] = packet.gyroscope.z;
+        ints[0] = _dai_timestamp_ns(packet.acceleroMeter.tsDevice);
+        ints[1] = _dai_timestamp_ns(packet.acceleroMeter.timestamp);
+        ints[2] = static_cast<int64_t>(packet.acceleroMeter.sequence);
+        ints[3] = _dai_timestamp_ns(packet.gyroscope.tsDevice);
+        ints[4] = _dai_timestamp_ns(packet.gyroscope.timestamp);
+        ints[5] = static_cast<int64_t>(packet.gyroscope.sequence);
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_imu_data_get_packet failed: ") + e.what();
+        return false;
+    }
+}
+
 } // namespace dai

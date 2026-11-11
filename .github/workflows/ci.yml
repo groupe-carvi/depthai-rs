@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, windows-latest]
-        sdk: [v3-1-0, v3-4-0, v3-8-0, v3-10-0]
+        sdk: [v3-1-0, v3-4-0, v3-8-0, v3-10-0, v3-11-0, v3-12-0]
 
     env:
       DEPTHAI_RS_CACHE_DIR: ${{ github.workspace }}/.depthai-cache

@@ -948,6 +948,29 @@ API const char *dai_get_last_error();
 API void dai_clear_last_error();
 
 #ifdef __cplusplus
+
+// --- Depth alignment and calibration -------------------------------------
+
+// Align the depth output to a camera socket (`dai::CameraBoardSocket` as an int).
+API void dai_stereo_set_depth_align(DaiNode stereo, int camera_socket);
+
+// Calibration (`dai::CalibrationHandler*`, owned by the caller).
+typedef void *DaiCalibration;
+API DaiCalibration dai_device_read_calibration(DaiDevice device);
+API void dai_calibration_release(DaiCalibration calibration);
+// Intrinsics at the sensor's default size: 9 doubles, row-major 3x3, and the size.
+API bool dai_calibration_get_default_intrinsics(DaiCalibration calibration, int camera_socket,
+                                                double *intrinsics, int *width, int *height);
+// Intrinsics scaled to another size: 9 doubles, row-major 3x3.
+API bool dai_calibration_get_intrinsics(DaiCalibration calibration, int camera_socket, int width,
+                                        int height, double *intrinsics);
+// Distortion coefficients: writes up to `capacity`, returns how many there are (-1 on error).
+API int dai_calibration_get_distortion(DaiCalibration calibration, int camera_socket,
+                                       double *coefficients, int capacity);
+// Extrinsics from one socket to another: 16 doubles, row-major 4x4, translation in centimetres.
+API bool dai_calibration_get_extrinsics(DaiCalibration calibration, int source_socket,
+                                        int destination_socket, double *matrix);
+
 } // extern "C"
 } // namespace dai
 #endif

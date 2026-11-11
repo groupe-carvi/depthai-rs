@@ -9784,4 +9784,118 @@ void dai_stereo_set_depth_align(DaiNode stereo, int camera_socket) {
     }
 }
 
+DaiCalibration dai_device_read_calibration(DaiDevice device) {
+    if(!device) {
+        last_error = "dai_device_read_calibration: null device";
+        return nullptr;
+    }
+    try {
+        auto dev = static_cast<std::shared_ptr<dai::Device>*>(device);
+        return new dai::CalibrationHandler((*dev)->readCalibration());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_device_read_calibration failed: ") + e.what();
+        return nullptr;
+    }
+}
+
+void dai_calibration_release(DaiCalibration calibration) {
+    if(calibration) {
+        delete static_cast<dai::CalibrationHandler*>(calibration);
+    }
+}
+
+static bool _dai_copy_matrix3(const std::vector<std::vector<float>>& m, double* out) {
+    if(m.size() != 3) return false;
+    for(size_t r = 0; r < 3; ++r) {
+        if(m[r].size() != 3) return false;
+        for(size_t c = 0; c < 3; ++c) out[r * 3 + c] = m[r][c];
+    }
+    return true;
+}
+
+bool dai_calibration_get_default_intrinsics(DaiCalibration calibration, int camera_socket, double* intrinsics, int* width, int* height) {
+    if(!calibration || !intrinsics || !width || !height) {
+        last_error = "dai_calibration_get_default_intrinsics: null argument";
+        return false;
+    }
+    try {
+        auto& cal = *static_cast<dai::CalibrationHandler*>(calibration);
+        auto [matrix, w, h] = cal.getDefaultIntrinsics(static_cast<dai::CameraBoardSocket>(camera_socket));
+        if(!_dai_copy_matrix3(matrix, intrinsics)) {
+            last_error = "dai_calibration_get_default_intrinsics: the intrinsics are not a 3x3 matrix";
+            return false;
+        }
+        *width = w;
+        *height = h;
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_calibration_get_default_intrinsics failed: ") + e.what();
+        return false;
+    }
+}
+
+bool dai_calibration_get_intrinsics(DaiCalibration calibration, int camera_socket, int width, int height, double* intrinsics) {
+    if(!calibration || !intrinsics) {
+        last_error = "dai_calibration_get_intrinsics: null argument";
+        return false;
+    }
+    try {
+        auto& cal = *static_cast<dai::CalibrationHandler*>(calibration);
+        auto matrix = cal.getCameraIntrinsics(static_cast<dai::CameraBoardSocket>(camera_socket), width, height);
+        if(!_dai_copy_matrix3(matrix, intrinsics)) {
+            last_error = "dai_calibration_get_intrinsics: the intrinsics are not a 3x3 matrix";
+            return false;
+        }
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_calibration_get_intrinsics failed: ") + e.what();
+        return false;
+    }
+}
+
+int dai_calibration_get_distortion(DaiCalibration calibration, int camera_socket, double* coefficients, int capacity) {
+    if(!calibration) {
+        last_error = "dai_calibration_get_distortion: null calibration";
+        return -1;
+    }
+    try {
+        auto& cal = *static_cast<dai::CalibrationHandler*>(calibration);
+        auto values = cal.getDistortionCoefficients(static_cast<dai::CameraBoardSocket>(camera_socket));
+        if(coefficients) {
+            for(size_t i = 0; i < values.size() && static_cast<int>(i) < capacity; ++i) coefficients[i] = values[i];
+        }
+        return static_cast<int>(values.size());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_calibration_get_distortion failed: ") + e.what();
+        return -1;
+    }
+}
+
+bool dai_calibration_get_extrinsics(DaiCalibration calibration, int source_socket, int destination_socket, double* matrix) {
+    if(!calibration || !matrix) {
+        last_error = "dai_calibration_get_extrinsics: null argument";
+        return false;
+    }
+    try {
+        auto& cal = *static_cast<dai::CalibrationHandler*>(calibration);
+        auto m = cal.getCameraExtrinsics(static_cast<dai::CameraBoardSocket>(source_socket), static_cast<dai::CameraBoardSocket>(destination_socket));
+        if(m.size() != 4) {
+            last_error = "dai_calibration_get_extrinsics: the extrinsics are not a 4x4 matrix";
+            return false;
+        }
+        for(size_t r = 0; r < 4; ++r) {
+            if(m[r].size() != 4) {
+                last_error = "dai_calibration_get_extrinsics: the extrinsics are not a 4x4 matrix";
+                return false;
+            }
+            for(size_t c = 0; c < 4; ++c) matrix[r * 4 + c] = m[r][c];
+        }
+        return true;
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_calibration_get_extrinsics failed: ") + e.what();
+        return false;
+    }
+}
+
+
 } // namespace dai

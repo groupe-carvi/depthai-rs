@@ -134,6 +134,7 @@ To build docs locally like docs.rs:
 cargo run --example pipeline_creation
 cargo run --example camera
 cargo run --example host_node
+cargo run --example calibration
 cargo run --example depth_align
 
 # Examples requiring the optional `rerun` feature
@@ -156,6 +157,7 @@ This table reflects what the Rust crates in this repo currently wrap and demonst
 | `Benchmark`                 |    🔴     |                                                           |
 |                             |           |                                                           |
 | `Multi-Device Pipeline`     |    🟡     |                                                           |
+| `CalibrationHandler`        |    🟢     | `Device::read_calibration`, `examples/calibration.rs`, `src/calibration.rs` |
 | `Camera`                    |    🟢     | `examples/camera.rs`                                      |
 | `DetectionNetwork`          |    🟢     | Core v3.8.0+; `examples/detection_network_node.rs`        |
 | `DynamicCalibration`        |    🔴     |                                                           |

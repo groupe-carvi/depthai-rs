@@ -452,6 +452,13 @@ include_cpp! {
     generate!("dai::dai_encoded_frame_set_sequence_num")
     generate!("dai::dai_encoded_frame_release")
 
+    // Calibration
+    generate!("dai::dai_device_read_calibration")
+    generate!("dai::dai_calibration_release")
+    generate!("dai::dai_calibration_get_default_intrinsics")
+    generate!("dai::dai_calibration_get_intrinsics")
+    generate!("dai::dai_calibration_get_distortion")
+    generate!("dai::dai_calibration_get_extrinsics")
 
     // PointCloudData accessors
     generate!("dai::dai_pointcloud_get_width")
@@ -575,6 +582,7 @@ pub type DaiDataQueue = *mut autocxx::c_void;
 pub type DaiDatatype = *mut autocxx::c_void;
 pub type DaiImgFrame = *mut autocxx::c_void;
 pub type DaiEncodedFrame = *mut autocxx::c_void;
+pub type DaiCalibration = *mut autocxx::c_void;
 pub type DaiPointCloud = *mut autocxx::c_void;
 pub type DaiRGBDData = *mut autocxx::c_void;
 pub type DaiMessageGroup = *mut autocxx::c_void;

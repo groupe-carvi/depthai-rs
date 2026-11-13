@@ -2205,6 +2205,47 @@ void dai_device_set_ir_laser_dot_projector_intensity(DaiDevice device, float int
     }
 }
 
+bool dai_device_set_ir_flood_light_intensity(DaiDevice device, float intensity, int mask) {
+    if(!device) {
+        last_error = "dai_device_set_ir_flood_light_intensity: null device";
+        return false;
+    }
+    try {
+        auto dev = static_cast<std::shared_ptr<dai::Device>*>(device);
+        if(!dev->get() || !(*dev)) {
+            last_error = "dai_device_set_ir_flood_light_intensity: invalid device";
+            return false;
+        }
+        return (*dev)->setIrFloodLightIntensity(intensity, mask);
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_device_set_ir_flood_light_intensity failed: ") + e.what();
+        return false;
+    }
+}
+
+char* dai_device_get_ir_drivers_json(DaiDevice device) {
+    if(!device) {
+        last_error = "dai_device_get_ir_drivers_json: null device";
+        return nullptr;
+    }
+    try {
+        auto dev = static_cast<std::shared_ptr<dai::Device>*>(device);
+        if(!dev->get() || !(*dev)) {
+            last_error = "dai_device_get_ir_drivers_json: invalid device";
+            return nullptr;
+        }
+        nlohmann::json drivers = nlohmann::json::array();
+        for(const auto& driver : (*dev)->getIrDrivers()) {
+            drivers.push_back({{"name", std::get<0>(driver)}, {"i2cBus", std::get<1>(driver)}, {"i2cAddress", std::get<2>(driver)}});
+        }
+        auto dumped = drivers.dump();
+        return dai_string_to_cstring(dumped.c_str());
+    } catch(const std::exception& e) {
+        last_error = std::string("dai_device_get_ir_drivers_json failed: ") + e.what();
+        return nullptr;
+    }
+}
+
 static inline dai::node::StereoDepth* _dai_as_stereo(DaiNode stereo) {
     return static_cast<dai::node::StereoDepth*>(stereo);
 }

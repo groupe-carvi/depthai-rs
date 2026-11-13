@@ -532,7 +532,7 @@ pub use error::{DepthaiError, Result};
 pub use pipeline::{CreateInPipeline, CreateInPipelineWith, DeviceNode, DeviceNodeWithParams};
 
 pub use device::{
-    CameraFeatures, CameraFov, CameraSensorConfig, Device, DeviceInfo, DevicePlatform,
+    CameraFeatures, CameraFov, CameraSensorConfig, Device, DeviceInfo, DevicePlatform, IrDriver,
 };
 pub use pipeline::Pipeline;
 

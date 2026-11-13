@@ -175,6 +175,36 @@ fn parse_camera_features_json(json: &str) -> Result<Vec<CameraFeatures>> {
     Ok(raw.into_iter().map(Into::into).collect())
 }
 
+/// An IR emitter driver chip on the device: its name and where it sits on the I2C bus.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrDriver {
+    pub name: String,
+    pub i2c_bus: i32,
+    pub i2c_address: i32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawIrDriver {
+    name: String,
+    i2c_bus: i32,
+    i2c_address: i32,
+}
+
+fn parse_ir_drivers_json(json: &str) -> Result<Vec<IrDriver>> {
+    let raw = serde_json::from_str::<Vec<RawIrDriver>>(json).map_err(|error| {
+        DepthaiError::new(format!("invalid IR drivers JSON from depthai-core: {error}"))
+    })?;
+    Ok(raw
+        .into_iter()
+        .map(|d| IrDriver {
+            name: d.name,
+            i2c_bus: d.i2c_bus,
+            i2c_address: d.i2c_address,
+        })
+        .collect())
+}
+
 impl DevicePlatform {
     pub fn from_raw(value: i32) -> Option<Self> {
         match value {
@@ -368,6 +398,36 @@ impl Device {
         }
     }
 
+    /// Set the IR flood light intensity (0.0..1.0; 0 or less turns it off). The emitter is off by default.
+    ///
+    /// Returns `Ok(true)` when the device accepted it and `Ok(false)` when the device has no flood emitter (see
+    /// [`Device::ir_drivers`]). `mask` limits the change to the left (`0x1`) or right (`0x2`) side on devices that
+    /// have two; `None` sets every emitter.
+    pub fn set_ir_flood_light_intensity(&self, intensity: f32, mask: Option<i32>) -> Result<bool> {
+        clear_error_flag();
+        let accepted = unsafe {
+            depthai::dai_device_set_ir_flood_light_intensity(
+                self.handle,
+                intensity,
+                autocxx::c_int(mask.unwrap_or(-1)),
+            )
+        };
+        match take_error_if_any("failed to set IR flood light intensity") {
+            Some(err) => Err(err),
+            None => Ok(accepted),
+        }
+    }
+
+    /// The IR laser and flood drivers the device detected, as `DeviceBase::getIrDrivers()` reports them. Empty when
+    /// the device has no IR emitter (for example an OAK 4 D without a projector).
+    pub fn ir_drivers(&self) -> Result<Vec<IrDriver>> {
+        clear_error_flag();
+        let raw = unsafe { depthai::dai_device_get_ir_drivers_json(self.handle) };
+        let json =
+            unsafe { take_dai_owned_string_lossy(raw, "failed to query IR drivers") }?;
+        parse_ir_drivers_json(&json)
+    }
+
     pub(crate) fn handle(&self) -> DaiDevice {
         self.handle
     }
@@ -420,6 +480,22 @@ mod platform_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_ir_drivers_json() {
+        let drivers =
+            parse_ir_drivers_json(r#"[{"name":"LM3644","i2cBus":2,"i2cAddress":99}]"#).unwrap();
+        assert_eq!(
+            drivers,
+            [IrDriver {
+                name: "LM3644".to_owned(),
+                i2c_bus: 2,
+                i2c_address: 0x63
+            }]
+        );
+        assert!(parse_ir_drivers_json("[]").unwrap().is_empty());
+        assert!(parse_ir_drivers_json("{").is_err());
+    }
 
     #[test]
     fn parses_connected_camera_features_json() {

@@ -435,6 +435,12 @@ API int dai_device_get_platform(DaiDevice device);
 API char *dai_device_get_connected_camera_features_json(DaiDevice device);
 API void dai_device_set_ir_laser_dot_projector_intensity(DaiDevice device,
                                                          float intensity);
+// IR flood light: `mask` is -1 for every emitter, 0x1 for the left side, 0x2 for the right (OAK-D-Pro-W-DEV).
+// Returns false when the device has no flood emitter or the call failed (see the last error).
+API bool dai_device_set_ir_flood_light_intensity(DaiDevice device, float intensity, int mask);
+// Returned JSON mirrors DeviceBase::getIrDrivers(): [{"name":"LM3644","i2cBus":2,"i2cAddress":99}]; an empty array when
+// the device has no IR driver. Caller must free with dai_free_cstring().
+API char *dai_device_get_ir_drivers_json(DaiDevice device);
 
 // StereoDepth configuration helpers
 API void dai_stereo_set_subpixel(DaiNode stereo, bool enable);

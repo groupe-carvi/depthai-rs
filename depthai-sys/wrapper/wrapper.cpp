@@ -2246,6 +2246,23 @@ char* dai_device_get_ir_drivers_json(DaiDevice device) {
     }
 }
 
+char* dai_device_info_measure_bandwidth_json(DaiDeviceInfo info) {
+    return device_ffi("dai_device_info_measure_bandwidth_json", [&]() -> char* {
+        // Only the bandwidth step: every other step of the health check is off (it would open the cameras, the IMU
+        // and the power supply check, which takes 20 s).
+        dai::HealthCheckConfig config(false, true, false, false, false, false, false);
+        auto metrics = dai::DeviceBase::performHealthCheck(device_info(info), config);
+        nlohmann::json issues = nlohmann::json::array();
+        for(const auto& issue : metrics.issues) {
+            issues.push_back({{"error", issue.type == dai::HealthCheckIssueType::Error},
+                              {"stage", static_cast<int>(issue.stage)},
+                              {"message", issue.message}});
+        }
+        nlohmann::json out = {{"bandwidthMbps", metrics.bandwidthMbps}, {"issues", issues}};
+        return dai_string_to_cstring(out.dump().c_str());
+    });
+}
+
 static inline dai::node::StereoDepth* _dai_as_stereo(DaiNode stereo) {
     return static_cast<dai::node::StereoDepth*>(stereo);
 }

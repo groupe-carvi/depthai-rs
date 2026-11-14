@@ -137,6 +137,7 @@ cargo run --example host_node
 cargo run --example imu
 cargo run --example open_by_address -- <ip address or device id>
 cargo run --example calibration
+cargo run --example link_bandwidth -- <ip address or device id>
 cargo run --example ir_illuminators
 cargo run --example depth_align
 

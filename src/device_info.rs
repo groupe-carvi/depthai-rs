@@ -139,6 +139,11 @@ impl DeviceInfo {
     /// Measure the throughput of the link to this device, which must not be open: depthai-core connects to it, runs
     /// its health check with only the bandwidth step on, and lets go of it again. It takes a few seconds, and the
     /// camera is busy meanwhile. Mirrors C++: `DeviceBase::performHealthCheck` with `measureBandwidth` only.
+    ///
+    /// Needs DepthAI-Core v3.8.0 or newer. On an older core the call does not reach the device and returns an error
+    /// carrying the native message "the device health check needs DepthAI-Core v3.8.0 or newer", so it can be told apart
+    /// from a failed measurement. What depthai-core does when the device is already open was not tried: nothing here
+    /// checks it, so any error it raises is returned as it is.
     pub fn measure_bandwidth(&self) -> Result<LinkBandwidth> {
         crate::error::clear_error_flag();
         let raw = unsafe { depthai::dai_device_info_measure_bandwidth_json(self.handle()) };

@@ -137,6 +137,7 @@ cargo run --example host_node
 cargo run --example imu
 cargo run --example open_by_address -- <ip address or device id>
 cargo run --example calibration
+cargo run --example link_bandwidth -- <ip address or device id>
 cargo run --example ir_illuminators
 cargo run --example depth_align
 
@@ -171,6 +172,7 @@ This table reflects what the Rust crates in this repo currently wrap and demonst
 | `IMU`                       |    🟢     | `examples/imu.rs`, `src/imu.rs`                           |
 | `ImageAlign`                |    🟢     | `examples/rgbd_rerun.rs`, `src/image_align.rs` (depth to a stereo camera: `StereoDepthNode::set_depth_align`) |
 | `ImageManip`                |    🟢     | `examples/image_manip.rs`, `src/image_manip.rs`           |
+| `Misc/HealthCheck`          |    🟡     | Bandwidth step only: `DeviceInfo::measure_bandwidth`, `examples/link_bandwidth.rs`; Core v3.8.0+ (other versions return an error) |
 | `Misc/AutoReconnect`        |    🔴     |                                                           |
 | `Misc/Projectors`           |    🟢     | `Device::set_ir_laser_dot_projector_intensity`, `Device::set_ir_flood_light_intensity`, `Device::ir_drivers`, `examples/ir_illuminators.rs`, `src/device.rs` |
 | `ModelZoo`                  |    🟢     |                                                           |

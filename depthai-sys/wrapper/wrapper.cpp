@@ -5,6 +5,12 @@
 #include "depthai/build/version.hpp"
 #include "depthai/common/ModelType.hpp"
 #include "depthai/common/Point3fRGBA.hpp"
+// DeviceBase::performHealthCheck and depthai/device/HealthCheck.hpp exist from DepthAI-Core v3.8.0 (not in v3.1.0 or v3.4.0).
+#if __has_include("depthai/device/HealthCheck.hpp")
+    #define DAI_HAS_HEALTH_CHECK 1
+#else
+    #define DAI_HAS_HEALTH_CHECK 0
+#endif
 #if __has_include("depthai/common/DeviceModelZoo.hpp")
     #include "depthai/common/DeviceModelZoo.hpp"
     #define DAI_HAS_DEVICE_MODEL_ZOO 1
@@ -2244,6 +2250,28 @@ char* dai_device_get_ir_drivers_json(DaiDevice device) {
         last_error = std::string("dai_device_get_ir_drivers_json failed: ") + e.what();
         return nullptr;
     }
+}
+
+char* dai_device_info_measure_bandwidth_json(DaiDeviceInfo info) {
+    return device_ffi("dai_device_info_measure_bandwidth_json", [&]() -> char* {
+#if !DAI_HAS_HEALTH_CHECK
+        (void)info;
+        throw std::runtime_error("the device health check needs DepthAI-Core v3.8.0 or newer");
+#else
+        // Only the bandwidth step: every other step of the health check is off (it would open the cameras, the IMU
+        // and the power supply check, which takes 20 s).
+        dai::HealthCheckConfig config(false, true, false, false, false, false, false);
+        auto metrics = dai::DeviceBase::performHealthCheck(device_info(info), config);
+        nlohmann::json issues = nlohmann::json::array();
+        for(const auto& issue : metrics.issues) {
+            issues.push_back({{"error", issue.type == dai::HealthCheckIssueType::Error},
+                              {"stage", static_cast<int>(issue.stage)},
+                              {"message", issue.message}});
+        }
+        nlohmann::json out = {{"bandwidthMbps", metrics.bandwidthMbps}, {"issues", issues}};
+        return dai_string_to_cstring(out.dump().c_str());
+#endif
+    });
 }
 
 static inline dai::node::StereoDepth* _dai_as_stereo(DaiNode stereo) {

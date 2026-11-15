@@ -534,6 +534,7 @@ pub use pipeline::{CreateInPipeline, CreateInPipelineWith, DeviceNode, DeviceNod
 pub use device::{
     CameraFeatures, CameraFov, CameraSensorConfig, Device, DeviceInfo, DevicePlatform, IrDriver,
 };
+pub use device_info::{LinkBandwidth, LinkIssue};
 pub use pipeline::Pipeline;
 
 pub use common::{CameraExposureOffset, CameraImageOrientation};

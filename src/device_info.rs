@@ -5,6 +5,55 @@ use autocxx::c_int;
 use depthai_sys::{DaiDeviceInfo, DaiDeviceInfoArray, depthai};
 use std::sync::Arc;
 
+/// What a bandwidth measurement of the link to a device found.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinkBandwidth {
+    /// The measured throughput in megabits a second; `0.0` when the measurement did not run or failed.
+    pub mbps: f32,
+    /// What the check had to say, as depthai-core worded it (warnings and errors alike).
+    pub issues: Vec<LinkIssue>,
+}
+
+/// One finding of the bandwidth measurement.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkIssue {
+    /// `true` for an error, `false` for a warning.
+    pub error: bool,
+    pub message: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawBandwidth {
+    bandwidth_mbps: f32,
+    issues: Vec<RawIssue>,
+}
+
+#[derive(serde::Deserialize)]
+struct RawIssue {
+    error: bool,
+    message: String,
+}
+
+fn parse_bandwidth_json(json: &str) -> Result<LinkBandwidth> {
+    let raw = serde_json::from_str::<RawBandwidth>(json).map_err(|error| {
+        crate::error::DepthaiError::new(format!(
+            "invalid bandwidth JSON from depthai-core: {error}"
+        ))
+    })?;
+    Ok(LinkBandwidth {
+        mbps: raw.bandwidth_mbps,
+        issues: raw
+            .issues
+            .into_iter()
+            .map(|i| LinkIssue {
+                error: i.error,
+                message: i.message,
+            })
+            .collect(),
+    })
+}
+
 struct NativeInfo(DaiDeviceInfo);
 // Native descriptors are immutable after construction. Getter calls only read
 // their strings/scalars, and the last Arc owner performs deletion.
@@ -87,6 +136,22 @@ impl DeviceInfo {
     pub fn status(&self) -> i32 {
         self.inner.metadata.status
     }
+    /// Measure the throughput of the link to this device, which must not be open: depthai-core connects to it, runs
+    /// its health check with only the bandwidth step on, and lets go of it again. It takes a few seconds, and the
+    /// camera is busy meanwhile. Mirrors C++: `DeviceBase::performHealthCheck` with `measureBandwidth` only.
+    ///
+    /// Needs DepthAI-Core v3.8.0 or newer. On an older core the call does not reach the device and returns an error
+    /// carrying the native message "the device health check needs DepthAI-Core v3.8.0 or newer", so it can be told apart
+    /// from a failed measurement. What depthai-core does when the device is already open was not tried: nothing here
+    /// checks it, so any error it raises is returned as it is.
+    pub fn measure_bandwidth(&self) -> Result<LinkBandwidth> {
+        crate::error::clear_error_flag();
+        let raw = unsafe { depthai::dai_device_info_measure_bandwidth_json(self.handle()) };
+        let json =
+            unsafe { take_dai_owned_string_lossy(raw, "failed to measure the link bandwidth") }?;
+        parse_bandwidth_json(&json)
+    }
+
     pub(crate) fn handle(&self) -> DaiDeviceInfo {
         self.inner.native.0
     }
@@ -172,6 +237,19 @@ mod tests {
     use super::*;
     use crate::error::{DepthaiError, clear_error_flag};
     use std::{cell::Cell, ffi::CString};
+
+    #[test]
+    fn the_bandwidth_json_of_the_native_wrapper_is_read() {
+        let found = parse_bandwidth_json(
+            r#"{"bandwidthMbps":93.5,"issues":[{"error":false,"stage":3,"message":"slow"},{"error":true,"stage":3,"message":"bad"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(found.mbps, 93.5);
+        assert_eq!(found.issues.len(), 2);
+        assert!(!found.issues[0].error && found.issues[1].error);
+        assert_eq!(found.issues[1].message, "bad");
+        assert!(parse_bandwidth_json("{}").is_err());
+    }
     thread_local! {
         static DROPS: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
     }

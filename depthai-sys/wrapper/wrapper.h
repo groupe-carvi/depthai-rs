@@ -441,6 +441,10 @@ API bool dai_device_set_ir_flood_light_intensity(DaiDevice device, float intensi
 // Returned JSON mirrors DeviceBase::getIrDrivers(): [{"name":"LM3644","i2cBus":2,"i2cAddress":99}]; an empty array when
 // the device has no IR driver. Caller must free with dai_free_cstring().
 API char *dai_device_get_ir_drivers_json(DaiDevice device);
+// Measures the throughput of the link to a device that is NOT open (DeviceBase::performHealthCheck with only the
+// bandwidth step on). Returned JSON: {"bandwidthMbps":941.2,"issues":[{"error":false,"stage":3,"message":"..."}]}; the
+// bandwidth is 0 when the step did not measure. Caller must free with dai_free_cstring().
+API char *dai_device_info_measure_bandwidth_json(DaiDeviceInfo info);
 
 // StereoDepth configuration helpers
 API void dai_stereo_set_subpixel(DaiNode stereo, bool enable);

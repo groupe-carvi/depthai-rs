@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Unofficial Rust bindings and safe wrapper for Luxonis's [DepthAI-Core](https://github.com/luxonis/depthai-core) C++ library (v3.1.0+). This is an experimental project by Groupe CARVI Inc.
+Unofficial Rust bindings and safe wrapper for Luxonis's [DepthAI-Core](https://github.com/luxonis/depthai-core) C++ library (v3.1.0+). This is an experimental project.
 
 ## Workspace Structure
 
